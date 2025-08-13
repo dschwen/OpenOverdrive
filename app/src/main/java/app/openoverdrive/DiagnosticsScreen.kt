@@ -52,6 +52,7 @@ fun DiagnosticsScreen(
     var lastNotif by remember { mutableStateOf<String>("") }
     var lastWriteOk by remember { mutableStateOf<Boolean?>(null) }
     var notifEnabled by remember { mutableStateOf<Boolean?>(null) }
+    var sdkEnabled by remember { mutableStateOf(false) }
 
     LaunchedEffect(scanning, permissions.allPermissionsGranted) {
         if (!scanning || !permissions.allPermissionsGranted) return@LaunchedEffect
@@ -62,6 +63,17 @@ fun DiagnosticsScreen(
         bleClient.notifications().collect { bytes ->
             notifCount += 1
             lastNotif = bytes.take(16).joinToString(" ") { b -> "%02X".format(b) }
+        }
+    }
+
+    // When connected, auto-enable notifications and SDK mode for easier testing
+    LaunchedEffect(conn) {
+        if (conn is ConnectionState.Connected) {
+            try { notifEnabled = bleClient.enableNotifications() } catch (_: Throwable) {}
+            try { lastWriteOk = bleClient.write(core.protocol.VehicleMsg.sdkMode(true)) } catch (_: Throwable) {}
+            sdkEnabled = true
+        } else if (conn is ConnectionState.Disconnected) {
+            sdkEnabled = false
         }
     }
 
@@ -103,12 +115,35 @@ fun DiagnosticsScreen(
                 Button(onClick = { scope.launch { notifEnabled = bleClient.enableNotifications() } }) { Text("Enable notifications") }
                 OutlinedButton(onClick = { scope.launch { lastWriteOk = bleClient.write(core.protocol.VehicleMsg.ping()) } }) { Text("Ping") }
                 OutlinedButton(onClick = { scope.launch { lastWriteOk = bleClient.write(core.protocol.VehicleMsg.batteryRequest()) } }) { Text("Battery req") }
-                OutlinedButton(onClick = { scope.launch { lastWriteOk = bleClient.write(core.protocol.VehicleMsg.sdkMode(true)) } }) { Text("SDK on") }
+                Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                    Text("SDK mode")
+                    androidx.compose.material3.Switch(
+                        checked = sdkEnabled,
+                        onCheckedChange = { checked ->
+                            sdkEnabled = checked
+                            scope.launch { lastWriteOk = bleClient.write(core.protocol.VehicleMsg.sdkMode(checked)) }
+                        }
+                    )
+                }
             }
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedButton(onClick = { scope.launch { lastWriteOk = bleClient.write(core.protocol.VehicleMsg.setSpeed(600, 25000)) } }) { Text("Test speed") }
-                OutlinedButton(onClick = { scope.launch { lastWriteOk = bleClient.write(core.protocol.VehicleMsg.setSpeed(0, 30000)) } }) { Text("Brake") }
+                OutlinedButton(onClick = { scope.launch { lastWriteOk = bleClient.write(core.protocol.VehicleMsg.setOffsetFromCenter(0f)) } }) { Text("Center offset") }
+                OutlinedButton(onClick = { scope.launch { lastWriteOk = bleClient.write(core.protocol.VehicleMsg.setSpeed(600, 25000, 1)) } }) { Text("Test speed") }
+                OutlinedButton(onClick = { scope.launch { lastWriteOk = bleClient.write(core.protocol.VehicleMsg.setSpeed(0, 30000, 1)) } }) { Text("Brake") }
+            }
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedButton(onClick = {
+                    scope.launch {
+                        lastWriteOk = bleClient.write(core.protocol.VehicleMsg.changeLane(600, 8000, -44f, hopIntent = 1, tag = 1))
+                    }
+                }) { Text("Lane L") }
+                OutlinedButton(onClick = {
+                    scope.launch {
+                        lastWriteOk = bleClient.write(core.protocol.VehicleMsg.changeLane(600, 8000, 44f, hopIntent = 1, tag = 2))
+                    }
+                }) { Text("Lane R") }
             }
             Spacer(Modifier.height(8.dp))
             Text("Notifications: $notifCount packets" + (notifEnabled?.let { " (enabled: $it)" } ?: ""))

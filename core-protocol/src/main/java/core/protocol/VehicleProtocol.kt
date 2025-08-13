@@ -57,15 +57,21 @@ object VehicleMsg {
         return bb.array()
     }
 
-    fun changeLane(hSpeedMmPerSec: Int, hAccelMmPerSec2: Int, offsetFromCenterMm: Float): ByteArray {
+    fun changeLane(
+        hSpeedMmPerSec: Int,
+        hAccelMmPerSec2: Int,
+        offsetFromCenterMm: Float,
+        hopIntent: Byte = 0,
+        tag: Byte = 0
+    ): ByteArray {
         val bb = bb(1 + 1 + 10)
         bb.put(11)
         bb.put(MsgId.C2V_CHANGE_LANE)
         bb.putShort(hSpeedMmPerSec.toShort())
         bb.putShort(hAccelMmPerSec2.toShort())
         bb.putFloat(offsetFromCenterMm)
-        bb.put(0) // hop_intent
-        bb.put(0) // tag
+        bb.put(hopIntent)
+        bb.put(tag)
         return bb.array()
     }
 

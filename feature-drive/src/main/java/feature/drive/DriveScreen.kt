@@ -36,6 +36,7 @@ fun DriveScreen(
     var lastLapTs by remember { mutableStateOf(0L) }
     var initSent by remember { mutableStateOf(false) }
     var lastLapTimeMs by remember { mutableStateOf<Long?>(null) }
+    var laneTag by remember { mutableStateOf(0) }
 
     LaunchedEffect(address) {
         client.notifications().collectLatest { bytes ->
@@ -71,16 +72,23 @@ fun DriveScreen(
     // React to connection state: send SDK mode and periodic battery when connected
     val connState by client.connectionState.collectAsState(initial = ConnectionState.Disconnected)
     LaunchedEffect(connState) {
-        if (connState is ConnectionState.Connected && !initSent) {
-            initSent = true
-            // Ensure notifications are enabled, then enable SDK mode and fetch battery; poll every 20s
-            try { client.enableNotifications() } catch (_: Throwable) {}
-            client.write(VehicleMsg.sdkMode(true))
-            client.write(VehicleMsg.batteryRequest())
-            while (true) {
-                delay(20000)
-                client.write(VehicleMsg.batteryRequest())
+        when (connState) {
+            is ConnectionState.Connected -> {
+                if (!initSent) {
+                    initSent = true
+                    try { client.enableNotifications() } catch (_: Throwable) {}
+                    client.write(VehicleMsg.sdkMode(true))
+                    client.write(VehicleMsg.batteryRequest())
+                    while (true) {
+                        delay(30000)
+                        client.write(VehicleMsg.batteryRequest())
+                    }
+                }
             }
+            is ConnectionState.Disconnected -> {
+                initSent = false
+            }
+            is ConnectionState.Connecting -> { /* no-op */ }
         }
     }
 
@@ -108,7 +116,7 @@ fun DriveScreen(
                 onValueChange = { v -> speed = v.toInt() },
                 onValueChangeFinished = {
                     scope.launch {
-                        client.write(VehicleMsg.setSpeed(speed, 25000))
+                        client.write(VehicleMsg.setSpeed(speed, 25000, 1))
                     }
                 },
                 valueRange = 0f..1500f
@@ -117,28 +125,37 @@ fun DriveScreen(
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                 Button(onClick = {
                     speed = (speed + 150).coerceAtMost(1500)
-                    scope.launch { client.write(VehicleMsg.setSpeed(speed, 25000)) }
+                    scope.launch { client.write(VehicleMsg.setSpeed(speed, 25000, 1)) }
                 }) { Text("Accelerate") }
 
                 Button(onClick = {
                     speed = 0
-                    scope.launch { client.write(VehicleMsg.setSpeed(0, 30000)) }
+                    scope.launch { client.write(VehicleMsg.setSpeed(0, 30000, 1)) }
                 }) { Text("Brake") }
             }
 
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                 Button(onClick = {
-                    // Left lane change: negative offset
                     scope.launch {
+                        val fwd = if (speed < 300) 300 else speed
+                        client.write(VehicleMsg.setSpeed(fwd, 25000, 1))
+                        delay(100)
                         client.write(VehicleMsg.setOffsetFromCenter(0f))
-                        client.write(VehicleMsg.changeLane(600, 8000, -44f))
+                        delay(100)
+                        client.write(VehicleMsg.changeLane(600, 8000, -44f, hopIntent = 1, tag = laneTag.toByte()))
+                        laneTag = (laneTag + 1) and 0xFF
                     }
                 }) { Text("Lane Left") }
 
                 Button(onClick = {
                     scope.launch {
+                        val fwd = if (speed < 300) 300 else speed
+                        client.write(VehicleMsg.setSpeed(fwd, 25000, 1))
+                        delay(100)
                         client.write(VehicleMsg.setOffsetFromCenter(0f))
-                        client.write(VehicleMsg.changeLane(600, 8000, 44f))
+                        delay(100)
+                        client.write(VehicleMsg.changeLane(600, 8000, 44f, hopIntent = 1, tag = laneTag.toByte()))
+                        laneTag = (laneTag + 1) and 0xFF
                     }
                 }) { Text("Lane Right") }
             }
@@ -155,7 +172,10 @@ fun DriveScreen(
                     lastLapTs = 0L
                     lastLapTimeMs = null
                 }) { Text(if (startPieceId == null) "Mark Start" else "Reset Laps") }
-                OutlinedButton(onClick = { onBack() }) { Text("Disconnect") }
+                OutlinedButton(onClick = {
+                    scope.launch { client.disconnect() }
+                    onBack()
+                }) { Text("Disconnect") }
             }
         }
     }

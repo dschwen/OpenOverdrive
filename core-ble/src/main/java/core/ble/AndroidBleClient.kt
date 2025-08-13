@@ -221,21 +221,25 @@ class AndroidBleClient(private val context: Context) : BleClient {
 
     @SuppressLint("MissingPermission")
     private fun writeOnce(g: BluetoothGatt, w: BluetoothGattCharacteristic, data: ByteArray, withResponse: Boolean): Boolean {
-        fun attempt(type: Int): Boolean {
-            return if (Build.VERSION.SDK_INT >= 33) {
-                g.writeCharacteristic(w, data, type) == BluetoothStatusCodes.SUCCESS
-            } else {
-                w.writeType = type
-                @Suppress("DEPRECATION")
-                w.value = data
-                pendingWriteContinuation = { /* legacy path doesn't get callback status reliably */ }
-                @Suppress("DEPRECATION")
-                g.writeCharacteristic(w)
-            }
+        val supportsResp = (w.properties and BluetoothGattCharacteristic.PROPERTY_WRITE) != 0
+        val supportsNoResp = (w.properties and BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE) != 0
+        val type = when {
+            withResponse && supportsResp -> BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+            !withResponse && supportsNoResp -> BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
+            supportsResp -> BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+            supportsNoResp -> BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
+            else -> BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
         }
-        val first = if (withResponse) BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT else BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
-        val second = if (withResponse) BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE else BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
-        return attempt(first) || attempt(second)
+        return if (Build.VERSION.SDK_INT >= 33) {
+            g.writeCharacteristic(w, data, type) == BluetoothStatusCodes.SUCCESS
+        } else {
+            w.writeType = type
+            @Suppress("DEPRECATION")
+            w.value = data
+            pendingWriteContinuation = { /* legacy path doesn't get callback status reliably */ }
+            @Suppress("DEPRECATION")
+            g.writeCharacteristic(w)
+        }
     }
 
     @SuppressLint("MissingPermission")
