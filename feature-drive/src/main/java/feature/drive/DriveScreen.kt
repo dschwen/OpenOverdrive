@@ -15,19 +15,19 @@ import core.protocol.VehicleMessage
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import app.openoverdrive.DriveSessionService
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.material3.ExperimentalMaterial3Api
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DriveScreen(
     address: String,
     onBack: () -> Unit,
-    bleClient: BleClient = run {
-        val ctx = androidx.compose.ui.platform.LocalContext.current
-        remember { AndroidBleClient(ctx) }
-    }
+    bleClient: BleClient? = null
 ) {
     val scope = rememberCoroutineScope()
+    val ctx = LocalContext.current
+    val client = bleClient ?: remember { AndroidBleClient(ctx) }
     var speed by remember { mutableStateOf(0) }
     var battery by remember { mutableStateOf<Int?>(null) }
     var laps by remember { mutableStateOf(0) }
@@ -36,10 +36,9 @@ fun DriveScreen(
     var lastLapTs by remember { mutableStateOf(0L) }
     var initSent by remember { mutableStateOf(false) }
     var lastLapTimeMs by remember { mutableStateOf<Long?>(null) }
-    val ctx = LocalContext.current
 
     LaunchedEffect(address) {
-        bleClient.notifications().collectLatest { bytes ->
+        client.notifications().collectLatest { bytes ->
             when (val msg = VehicleMsgParser.parse(bytes)) {
                 is VehicleMessage.BatteryLevel -> battery = msg.percent
                 is VehicleMessage.PositionUpdate -> {
@@ -70,18 +69,16 @@ fun DriveScreen(
     }
 
     // React to connection state: send SDK mode and periodic battery when connected
-    val connState by bleClient.connectionState.collectAsState(initial = ConnectionState.Disconnected)
+    val connState by client.connectionState.collectAsState(initial = ConnectionState.Disconnected)
     LaunchedEffect(connState) {
         if (connState is ConnectionState.Connected && !initSent) {
             initSent = true
             // Enable SDK mode and fetch battery, then poll every 20s
-            bleClient.write(VehicleMsg.sdkMode(true))
-            bleClient.write(VehicleMsg.batteryRequest())
-            // Start foreground service for stability
-            DriveSessionService.start(ctx, label = address)
+            client.write(VehicleMsg.sdkMode(true))
+            client.write(VehicleMsg.batteryRequest())
             while (true) {
                 delay(20000)
-                bleClient.write(VehicleMsg.batteryRequest())
+                client.write(VehicleMsg.batteryRequest())
             }
         }
     }
@@ -110,7 +107,7 @@ fun DriveScreen(
                 onValueChange = { v -> speed = v.toInt() },
                 onValueChangeFinished = {
                     scope.launch {
-                        bleClient.write(VehicleMsg.setSpeed(speed, 25000))
+                        client.write(VehicleMsg.setSpeed(speed, 25000))
                     }
                 },
                 valueRange = 0f..1500f
@@ -119,12 +116,12 @@ fun DriveScreen(
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                 Button(onClick = {
                     speed = (speed + 150).coerceAtMost(1500)
-                    scope.launch { bleClient.write(VehicleMsg.setSpeed(speed, 25000)) }
+                    scope.launch { client.write(VehicleMsg.setSpeed(speed, 25000)) }
                 }) { Text("Accelerate") }
 
                 Button(onClick = {
                     speed = 0
-                    scope.launch { bleClient.write(VehicleMsg.setSpeed(0, 30000)) }
+                    scope.launch { client.write(VehicleMsg.setSpeed(0, 30000)) }
                 }) { Text("Brake") }
             }
 
@@ -132,15 +129,15 @@ fun DriveScreen(
                 Button(onClick = {
                     // Left lane change: negative offset
                     scope.launch {
-                        bleClient.write(VehicleMsg.setOffsetFromCenter(0f))
-                        bleClient.write(VehicleMsg.changeLane(600, 8000, -44f))
+                        client.write(VehicleMsg.setOffsetFromCenter(0f))
+                        client.write(VehicleMsg.changeLane(600, 8000, -44f))
                     }
                 }) { Text("Lane Left") }
 
                 Button(onClick = {
                     scope.launch {
-                        bleClient.write(VehicleMsg.setOffsetFromCenter(0f))
-                        bleClient.write(VehicleMsg.changeLane(600, 8000, 44f))
+                        client.write(VehicleMsg.setOffsetFromCenter(0f))
+                        client.write(VehicleMsg.changeLane(600, 8000, 44f))
                     }
                 }) { Text("Lane Right") }
             }
@@ -148,7 +145,7 @@ fun DriveScreen(
             Spacer(Modifier.weight(1f))
 
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                OutlinedButton(onClick = { scope.launch { bleClient.write(VehicleMsg.batteryRequest()) } }) {
+                OutlinedButton(onClick = { scope.launch { client.write(VehicleMsg.batteryRequest()) } }) {
                     Text("Read Battery")
                 }
                 OutlinedButton(onClick = {

@@ -19,6 +19,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.coroutines.resume
+import android.bluetooth.BluetoothStatusCodes
 
 /**
  * Android BLE client implementing scanning, connect/GATT, notifications, and queued writes.

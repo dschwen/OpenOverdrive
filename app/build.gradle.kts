@@ -61,12 +61,13 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     implementation("androidx.activity:activity-compose:1.9.2")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.4")
+    implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.navigation:navigation-compose:2.7.7")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
     implementation("androidx.datastore:datastore-preferences:1.1.1")
     implementation("com.google.accompanist:accompanist-permissions:0.35.2-beta")
+    implementation("com.google.android.material:material:1.12.0")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
-

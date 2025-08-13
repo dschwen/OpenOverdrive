@@ -3,7 +3,7 @@ package data
 import android.content.Context
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
-import androidx.datastore.preferences.core.preferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import core.ble.BleClient
 import core.ble.BleDevice
@@ -16,10 +16,11 @@ import org.json.JSONObject
 private val Context.dataStore by preferencesDataStore(name = "car_profiles")
 
 class CarRepository(private val context: Context, private val ble: BleClient) {
-    private val KEY = preferencesKey<String>("profiles_json")
+    private val KEY = stringPreferencesKey("profiles_json")
 
-    val profilesFlow: Flow<List<CarProfile>> = context.dataStore.data.map { prefs ->
-        prefs[KEY]?.let { decodeProfiles(it) } ?: emptyList()
+    val profilesFlow: Flow<List<CarProfile>> = context.dataStore.data.map { prefs: Preferences ->
+        val raw = prefs[KEY]
+        if (raw != null) decodeProfiles(raw) else emptyList()
     }
 
     fun visibleWithProfiles(devicesFlow: Flow<List<BleDevice>>): Flow<List<Pair<BleDevice, CarProfile?>>> =

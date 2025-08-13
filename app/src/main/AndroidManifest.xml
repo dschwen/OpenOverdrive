@@ -1,8 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="35" />
-
     <!-- BLE permissions (Android 12+) -->
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
@@ -19,7 +17,7 @@
         android:label="Open Overdrive"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.Material3.DayNight.NoActionBar">
+        android:theme="@style/Theme.OpenOverdrive">
 
         <activity
             android:name=".MainActivity"

@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -25,22 +26,17 @@ import data.AppSettingsRepository
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalPermissionsApi::class)
+@OptIn(ExperimentalPermissionsApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun DiscoveryScreen(
     onConnected: (String) -> Unit,
-    bleClient: BleClient = run {
-        val ctx = androidx.compose.ui.platform.LocalContext.current
-        remember { AndroidBleClient(ctx) }
-    },
-    carRepositoryProvider: (BleClient) -> CarRepository = { ble ->
-        // In app we’ll provide a real instance via DI; here use a placeholder that won’t crash.
-        CarRepository(androidx.compose.ui.platform.LocalContext.current, ble)
-    }
+    bleClient: BleClient? = null,
+    carRepositoryProvider: (android.content.Context, BleClient) -> CarRepository = { ctx, ble -> CarRepository(ctx, ble) }
 ) {
     val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
-    val carRepo = remember { carRepositoryProvider(bleClient) }
+    val client = bleClient ?: remember { AndroidBleClient(context) }
+    val carRepo = remember { carRepositoryProvider(context, client) }
     val appSettings = remember { AppSettingsRepository(context) }
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -60,14 +56,14 @@ fun DiscoveryScreen(
     var colorPickerFor by remember { mutableStateOf<Pair<String, CarProfile?>?>(null) }
     var nameEditorFor by remember { mutableStateOf<Pair<String, CarProfile?>?>(null) }
     val profiles by carRepo.profilesFlow.collectAsState(initial = emptyList())
-    val connState by bleClient.connectionState.collectAsState()
+    val connState by client.connectionState.collectAsState()
     var autoConnectAttempted by remember { mutableStateOf(setOf<String>()) }
     val onlyOnDiscovery by appSettings.autoConnectOnlyDiscovery.collectAsState(initial = true)
     val delayEnabled by appSettings.autoConnectDelayEnabled.collectAsState(initial = false)
 
     LaunchedEffect(permissions.allPermissionsGranted) {
         if (!permissions.allPermissionsGranted) return@LaunchedEffect
-        carRepo.visibleWithProfiles(bleClient.scanForAnkiDevices())
+        carRepo.visibleWithProfiles(client.scanForAnkiDevices())
             .collectLatest { list -> items = list }
     }
 
@@ -89,7 +85,7 @@ fun DiscoveryScreen(
             if (delayEnabled) {
                 kotlinx.coroutines.delay(400)
             }
-            bleClient.connect(addr)
+            client.connect(addr)
             onConnected(addr)
         }
     }
@@ -130,7 +126,7 @@ fun DiscoveryScreen(
                                     lastConnected = System.currentTimeMillis()
                                 )
                                 carRepo.upsertProfile(updated)
-                                bleClient.connect(dev.address)
+                                client.connect(dev.address)
                                 onConnected(dev.address)
                             }
                         },
@@ -159,7 +155,7 @@ fun DiscoveryScreen(
                             }
                         )
                     }
-                    Divider()
+                    HorizontalDivider()
                 }
             }
 
@@ -180,7 +176,7 @@ fun DiscoveryScreen(
                         onConnect = {
                             if (isVisible) {
                                 scope.launch {
-                                    bleClient.connect(prof.deviceAddress)
+                                    client.connect(prof.deviceAddress)
                                     onConnected(prof.deviceAddress)
                                 }
                             }
@@ -204,7 +200,7 @@ fun DiscoveryScreen(
                             scope.launch { carRepo.removeProfile(prof.deviceAddress) }
                         })
                     }
-                    Divider()
+                    HorizontalDivider()
                 }
             }
 
@@ -246,17 +242,11 @@ private fun DeviceRow(
     onOpenMenu: (String) -> Unit
 ) {
     ListItem(
-        leadingContent = {
-            profile?.colorArgb?.let { ColorSwatch(it) }
-        },
-        headlineText = { Text(profile?.displayName ?: device.name ?: device.address) },
-        supportingText = { Text(device.address) },
-        trailingContent = {
-            TextButton(onClick = { onOpenMenu(device.address) }) { Text("⋮") }
-        },
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onConnect() }
+        leadingContent = { profile?.colorArgb?.let { ColorSwatch(it) } },
+        headlineContent = { Text(profile?.displayName ?: device.name ?: device.address) },
+        supportingContent = { Text(device.address) },
+        trailingContent = { TextButton(onClick = { onOpenMenu(device.address) }) { Text("⋮") } },
+        modifier = Modifier.fillMaxWidth().clickable { onConnect() }
     )
 }
 
@@ -276,8 +266,8 @@ private fun KnownCarRow(
     }
     ListItem(
         leadingContent = { profile.colorArgb?.let { ColorSwatch(it) } },
-        headlineText = { Text(profile.displayName ?: profile.lastSeenName ?: profile.deviceAddress) },
-        supportingText = { Text(subtitle) },
+        headlineContent = { Text(profile.displayName ?: profile.lastSeenName ?: profile.deviceAddress) },
+        supportingContent = { Text(subtitle) },
         trailingContent = {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("Auto-connect")
