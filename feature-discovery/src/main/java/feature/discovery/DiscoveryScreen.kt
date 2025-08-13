@@ -31,7 +31,8 @@ import kotlinx.coroutines.launch
 fun DiscoveryScreen(
     onConnected: (String) -> Unit,
     bleClient: BleClient? = null,
-    carRepositoryProvider: (android.content.Context, BleClient) -> CarRepository = { ctx, ble -> CarRepository(ctx, ble) }
+    carRepositoryProvider: (android.content.Context, BleClient) -> CarRepository = { ctx, ble -> CarRepository(ctx, ble) },
+    onOpenDiagnostics: () -> Unit = {}
 ) {
     val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -91,7 +92,14 @@ fun DiscoveryScreen(
     }
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text("Discover & Connect") }) },
+        topBar = {
+            TopAppBar(
+                title = { Text("Discover & Connect") },
+                actions = {
+                    TextButton(onClick = onOpenDiagnostics) { Text("Diagnostics") }
+                }
+            )
+        },
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
     ) { padding ->
         Column(Modifier.padding(padding).fillMaxSize()) {

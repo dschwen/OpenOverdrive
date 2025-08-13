@@ -37,12 +37,16 @@ fun AppNav(navController: NavHostController = rememberNavController()) {
                 onConnected = { deviceAddress ->
                     navController.navigate("drive/$deviceAddress")
                 },
-                bleClient = bleClient
+                bleClient = bleClient,
+                onOpenDiagnostics = { navController.navigate("diagnostics") }
             )
         }
         composable("drive/{address}") { backStackEntry ->
             val address = backStackEntry.arguments?.getString("address") ?: ""
             DriveScreen(address = address, onBack = { navController.popBackStack() }, bleClient = bleClient)
+        }
+        composable("diagnostics") {
+            DiagnosticsScreen(onBack = { navController.popBackStack() }, bleClient = bleClient)
         }
     }
 }

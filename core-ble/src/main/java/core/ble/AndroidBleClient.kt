@@ -160,7 +160,16 @@ class AndroidBleClient(private val context: Context) : BleClient {
         cccd.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
         return suspendCancellableCoroutine { cont ->
             val ok = g.writeDescriptor(cccd)
-            if (!ok) cont.resume(false) else appScope.launch {
+            if (!ok) {
+                // Some stacks prefer indications; try that as a fallback
+                try {
+                    cccd.value = BluetoothGattDescriptor.ENABLE_INDICATION_VALUE
+                    val ok2 = g.writeDescriptor(cccd)
+                    if (!ok2) cont.resume(false) else appScope.launch { cont.resume(true) }
+                } catch (_: Throwable) {
+                    cont.resume(false)
+                }
+            } else appScope.launch {
                 // There is no guaranteed callback for descriptor write success in all cases; resume optimistically.
                 cont.resume(true)
             }
