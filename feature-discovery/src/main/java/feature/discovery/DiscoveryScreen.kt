@@ -8,21 +8,25 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.ColorLens
+import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.toArgb
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
-import com.google.accompanist.permissions.rememberPermissionState
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
 import core.ble.BleClient
 import core.ble.AndroidBleClient
 import core.ble.BleDevice
 import data.CarRepository
 import data.CarProfile
-import data.AppSettingsRepository
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
@@ -38,7 +42,6 @@ fun DiscoveryScreen(
     val context = androidx.compose.ui.platform.LocalContext.current
     val client = bleClient ?: remember { AndroidBleClient(context) }
     val carRepo = remember { carRepositoryProvider(context, client) }
-    val appSettings = remember { AppSettingsRepository(context) }
     val snackbarHostState = remember { SnackbarHostState() }
 
     val permissions = if (Build.VERSION.SDK_INT >= 31) {
@@ -56,11 +59,8 @@ fun DiscoveryScreen(
     var menuForAddress by remember { mutableStateOf<String?>(null) }
     var colorPickerFor by remember { mutableStateOf<Pair<String, CarProfile?>?>(null) }
     var nameEditorFor by remember { mutableStateOf<Pair<String, CarProfile?>?>(null) }
-    val profiles by carRepo.profilesFlow.collectAsState(initial = emptyList())
-    val connState by client.connectionState.collectAsState()
-    var autoConnectAttempted by remember { mutableStateOf(setOf<String>()) }
-    val onlyOnDiscovery by appSettings.autoConnectOnlyDiscovery.collectAsState(initial = true)
-    val delayEnabled by appSettings.autoConnectDelayEnabled.collectAsState(initial = false)
+    var confirmForgetFor by remember { mutableStateOf<String?>(null) }
+    // Profiles are stored for color/name, but we don't render a separate list here.
 
     LaunchedEffect(permissions.allPermissionsGranted) {
         if (!permissions.allPermissionsGranted) return@LaunchedEffect
@@ -68,28 +68,7 @@ fun DiscoveryScreen(
             .collectLatest { list -> items = list }
     }
 
-    // Auto-connect when a known car with autoConnect=true becomes visible and we're idle.
-    LaunchedEffect(items, profiles, connState, onlyOnDiscovery) {
-        val isIdle = connState is core.ble.ConnectionState.Disconnected
-        if (!isIdle) return@LaunchedEffect
-        // Prefer most recently connected auto-connect profile that is visible
-        val visibleProfiles = items.mapNotNull { (dev, prof) ->
-            val p = prof ?: profiles.find { it.deviceAddress == dev.address }
-            if (p?.autoConnect == true) p to dev.address else null
-        }
-        val target = visibleProfiles.maxByOrNull { it.first.lastConnected ?: 0L } ?: return@LaunchedEffect
-        val addr = target.second
-        if (!autoConnectAttempted.contains(addr)) {
-            autoConnectAttempted = autoConnectAttempted + addr
-            val label = target.first.displayName ?: target.first.lastSeenName ?: addr
-            scope.launch { snackbarHostState.showSnackbar("Auto-connecting to $label") }
-            if (delayEnabled) {
-                kotlinx.coroutines.delay(400)
-            }
-            client.connect(addr)
-            onConnected(addr)
-        }
-    }
+    // Removed auto-connect for a simpler, more explicit UX.
 
     Scaffold(
         topBar = {
@@ -113,20 +92,17 @@ fun DiscoveryScreen(
                 }
             }
 
-            val visibleAddresses = remember(items) { items.map { it.first.address }.toSet() }
-
             Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Text("Nearby Devices", style = MaterialTheme.typography.titleMedium)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Auto-connect only here")
-                    Switch(checked = onlyOnDiscovery, onCheckedChange = { checked -> scope.launch { appSettings.setAutoConnectOnlyDiscovery(checked) } })
-                }
             }
             LazyColumn(Modifier.fillMaxWidth().weight(1f)) {
                 items(items) { (dev, profile) ->
                     DeviceRow(
                         device = dev,
                         profile = profile,
+                        menuExpanded = menuForAddress == dev.address,
+                        onOpenMenu = { addr -> menuForAddress = addr },
+                        onDismissMenu = { menuForAddress = null },
                         onConnect = {
                             scope.launch {
                                 val updated = (profile ?: CarProfile(deviceAddress = dev.address)).copy(
@@ -138,76 +114,19 @@ fun DiscoveryScreen(
                                 onConnected(dev.address)
                             }
                         },
-                        onOpenMenu = { addr -> menuForAddress = addr }
-                    )
-                    DropdownMenu(expanded = menuForAddress == dev.address, onDismissRequest = { menuForAddress = null }) {
-                        DropdownMenuItem(
-                            text = { Text("Set Color") },
-                            onClick = {
-                                menuForAddress = null
-                                colorPickerFor = dev.address to profile
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Edit Name") },
-                            onClick = {
-                                menuForAddress = null
-                                nameEditorFor = dev.address to profile
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Forget") },
-                            onClick = {
-                                menuForAddress = null
-                                scope.launch { carRepo.removeProfile(dev.address) }
-                            }
-                        )
-                    }
-                    HorizontalDivider()
-                }
-            }
-
-            Spacer(Modifier.height(8.dp))
-            Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text("Known Cars", style = MaterialTheme.typography.titleMedium)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Delay on auto-connect")
-                    Switch(checked = delayEnabled, onCheckedChange = { checked -> scope.launch { appSettings.setAutoConnectDelayEnabled(checked) } })
-                }
-            }
-            LazyColumn(Modifier.fillMaxWidth().weight(1f)) {
-                items(profiles.sortedByDescending { it.lastConnected ?: 0L }) { prof ->
-                    val isVisible = visibleAddresses.contains(prof.deviceAddress)
-                    KnownCarRow(
-                        profile = prof,
-                        isVisible = isVisible,
-                        onConnect = {
-                            if (isVisible) {
-                                scope.launch {
-                                    client.connect(prof.deviceAddress)
-                                    onConnected(prof.deviceAddress)
-                                }
-                            }
+                        onPickColor = {
+                            colorPickerFor = dev.address to profile
+                            menuForAddress = null
                         },
-                        onOpenMenu = { addr -> menuForAddress = addr },
-                        onSetAutoConnect = { checked ->
-                            scope.launch { carRepo.upsertProfile(prof.copy(autoConnect = checked)) }
+                        onEditName = {
+                            nameEditorFor = dev.address to profile
+                            menuForAddress = null
+                        },
+                        onForget = {
+                            confirmForgetFor = dev.address
+                            menuForAddress = null
                         }
                     )
-                    DropdownMenu(expanded = menuForAddress == prof.deviceAddress, onDismissRequest = { menuForAddress = null }) {
-                        DropdownMenuItem(text = { Text("Set Color") }, onClick = {
-                            menuForAddress = null
-                            colorPickerFor = prof.deviceAddress to prof
-                        })
-                        DropdownMenuItem(text = { Text("Edit Name") }, onClick = {
-                            menuForAddress = null
-                            nameEditorFor = prof.deviceAddress to prof
-                        })
-                        DropdownMenuItem(text = { Text("Forget") }, onClick = {
-                            menuForAddress = null
-                            scope.launch { carRepo.removeProfile(prof.deviceAddress) }
-                        })
-                    }
                     HorizontalDivider()
                 }
             }
@@ -238,6 +157,22 @@ fun DiscoveryScreen(
                     }
                 )
             }
+            confirmForgetFor?.let { addr ->
+                AlertDialog(
+                    onDismissRequest = { confirmForgetFor = null },
+                    title = { Text("Forget car?") },
+                    text = { Text("Remove saved name and color for $addr?") },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            scope.launch {
+                                carRepo.removeProfile(addr)
+                                confirmForgetFor = null
+                            }
+                        }) { Text("Forget") }
+                    },
+                    dismissButton = { TextButton(onClick = { confirmForgetFor = null }) { Text("Cancel") } }
+                )
+            }
         }
     }
 }
@@ -246,47 +181,47 @@ fun DiscoveryScreen(
 private fun DeviceRow(
     device: BleDevice,
     profile: CarProfile?,
+    menuExpanded: Boolean,
     onConnect: () -> Unit,
-    onOpenMenu: (String) -> Unit
+    onOpenMenu: (String) -> Unit,
+    onDismissMenu: () -> Unit,
+    onPickColor: () -> Unit,
+    onEditName: () -> Unit,
+    onForget: () -> Unit
 ) {
     ListItem(
         leadingContent = { profile?.colorArgb?.let { ColorSwatch(it) } },
         headlineContent = { Text(profile?.displayName ?: device.name ?: device.address) },
         supportingContent = { Text(device.address) },
-        trailingContent = { TextButton(onClick = { onOpenMenu(device.address) }) { Text("⋮") } },
+        trailingContent = {
+            Box {
+                IconButton(onClick = { onOpenMenu(device.address) }) {
+                    Icon(Icons.Filled.MoreVert, contentDescription = "More")
+                }
+                DropdownMenu(expanded = menuExpanded, onDismissRequest = onDismissMenu) {
+                    DropdownMenuItem(
+                        text = { Text("Set Color") },
+                        leadingIcon = { Icon(Icons.Filled.ColorLens, contentDescription = null) },
+                        onClick = onPickColor
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Edit Name") },
+                        leadingIcon = { Icon(Icons.Filled.Edit, contentDescription = null) },
+                        onClick = onEditName
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Forget") },
+                        leadingIcon = { Icon(Icons.Outlined.Delete, contentDescription = null) },
+                        onClick = onForget
+                    )
+                }
+            }
+        },
         modifier = Modifier.fillMaxWidth().clickable { onConnect() }
     )
 }
 
-@Composable
-private fun KnownCarRow(
-    profile: CarProfile,
-    isVisible: Boolean,
-    onConnect: () -> Unit,
-    onOpenMenu: (String) -> Unit,
-    onSetAutoConnect: (Boolean) -> Unit
-) {
-    val recentlyUsed = (profile.lastConnected ?: 0L) > (System.currentTimeMillis() - 24L*60*60*1000)
-    val subtitle = buildString {
-        append(profile.deviceAddress)
-        if (!isVisible) append(" • Not visible") else append(" • Visible now")
-        if (recentlyUsed) append(" • Recently used")
-    }
-    ListItem(
-        leadingContent = { profile.colorArgb?.let { ColorSwatch(it) } },
-        headlineContent = { Text(profile.displayName ?: profile.lastSeenName ?: profile.deviceAddress) },
-        supportingContent = { Text(subtitle) },
-        trailingContent = {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("Auto-connect")
-                Switch(checked = profile.autoConnect, onCheckedChange = onSetAutoConnect)
-                OutlinedButton(onClick = onConnect, enabled = isVisible) { Text("Connect") }
-                TextButton(onClick = { onOpenMenu(profile.deviceAddress) }) { Text("⋮") }
-            }
-        },
-        modifier = Modifier.fillMaxWidth()
-    )
-}
+// Known cars and auto-connect removed for a cleaner, explicit flow.
 
 @Composable
 private fun ColorSwatch(argb: Int) {
@@ -307,6 +242,12 @@ private fun ColorPickerDialog(onDismiss: () -> Unit, onPick: (Int) -> Unit) {
     )
     var customHex by remember { mutableStateOf("") }
     var inputError by remember { mutableStateOf<String?>(null) }
+    var hue by remember { mutableFloatStateOf(0f) }
+    var sat by remember { mutableFloatStateOf(1f) }
+    var value by remember { mutableFloatStateOf(1f) }
+    val hsvColor by remember(hue, sat, value) {
+        mutableStateOf(Color.hsv(hue.coerceIn(0f, 360f), sat.coerceIn(0f, 1f), value.coerceIn(0f, 1f)))
+    }
 
     fun parseHex(input: String): Int? {
         val raw = input.trim().removePrefix("#").uppercase()
@@ -335,6 +276,21 @@ private fun ColorPickerDialog(onDismiss: () -> Unit, onPick: (Int) -> Unit) {
                     }
                 }
                 HorizontalDivider()
+                Text("Custom (interactive)")
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(36.dp).background(hsvColor, shape = MaterialTheme.shapes.small))
+                    Text("Preview")
+                    Spacer(Modifier.weight(1f))
+                    Button(onClick = { onPick(hsvColor.toArgb()) }) { Text("Use") }
+                }
+                Text("Hue")
+                Slider(value = hue, onValueChange = { hue = it }, valueRange = 0f..360f)
+                Text("Saturation")
+                Slider(value = sat, onValueChange = { sat = it }, valueRange = 0f..1f)
+                Text("Value")
+                Slider(value = value, onValueChange = { value = it }, valueRange = 0f..1f)
+
+                HorizontalDivider()
                 Text("Custom (hex #RRGGBB or #AARRGGBB)")
                 OutlinedTextField(
                     value = customHex,
@@ -352,7 +308,6 @@ private fun ColorPickerDialog(onDismiss: () -> Unit, onPick: (Int) -> Unit) {
                         val parsed = parseHex(customHex)
                         if (parsed != null) onPick(parsed) else inputError = "Invalid hex"
                     }) { Text("Apply") }
-                    TextButton(onClick = { customHex = "#C0C0C0" }) { Text("Silver") }
                 }
             }
         },
