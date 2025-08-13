@@ -6,7 +6,7 @@ plugins {
 android {
     namespace = "feature.discovery"
     compileSdk = 35
-    defaultConfig { minSdk = 24; targetSdk = 35 }
+    defaultConfig { minSdk = 24 }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
     kotlinOptions { jvmTarget = "17" }
     buildFeatures { compose = true }

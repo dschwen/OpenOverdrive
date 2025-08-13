@@ -6,7 +6,7 @@ plugins {
 android {
     namespace = "feature.drive"
     compileSdk = 35
-    defaultConfig { minSdk = 24; targetSdk = 35 }
+    defaultConfig { minSdk = 24 }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
     kotlinOptions { jvmTarget = "17" }
     buildFeatures { compose = true }
@@ -22,4 +22,3 @@ dependencies {
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
 }
-
