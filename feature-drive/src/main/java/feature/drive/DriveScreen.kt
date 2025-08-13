@@ -15,6 +15,8 @@ import core.protocol.VehicleMessage
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import app.openoverdrive.DriveSessionService
+import androidx.compose.ui.platform.LocalContext
 
 @Composable
 fun DriveScreen(
@@ -33,6 +35,8 @@ fun DriveScreen(
     var lastPieceId by remember { mutableStateOf<Int?>(null) }
     var lastLapTs by remember { mutableStateOf(0L) }
     var initSent by remember { mutableStateOf(false) }
+    var lastLapTimeMs by remember { mutableStateOf<Long?>(null) }
+    val ctx = LocalContext.current
 
     LaunchedEffect(address) {
         bleClient.notifications().collectLatest { bytes ->
@@ -40,14 +44,24 @@ fun DriveScreen(
                 is VehicleMessage.BatteryLevel -> battery = msg.percent
                 is VehicleMessage.PositionUpdate -> {
                     val rp = msg.roadPieceId
-                    lastPieceId = rp
-                    val marker = startPieceId
-                    if (marker != null && rp == marker) {
-                        val now = System.currentTimeMillis()
-                        if (now - lastLapTs > 5000) {
-                            laps += 1
-                            lastLapTs = now
+                    if (lastPieceId != rp) {
+                        val marker = startPieceId
+                        val forward = !msg.reverseDriving
+                        if (marker != null && rp == marker && forward) {
+                            val now = System.currentTimeMillis()
+                            if (now - lastLapTs > 3000) {
+                                laps += 1
+                                lastLapTimeMs = if (lastLapTs == 0L) null else now - lastLapTs
+                                lastLapTs = now
+                            }
                         }
+                        lastPieceId = rp
+                    }
+                }
+                is VehicleMessage.TransitionUpdate -> {
+                    val rp = msg.roadPieceIdx
+                    if (lastPieceId != rp) {
+                        lastPieceId = rp
                     }
                 }
                 else -> {}
@@ -63,6 +77,8 @@ fun DriveScreen(
             // Enable SDK mode and fetch battery, then poll every 20s
             bleClient.write(VehicleMsg.sdkMode(true))
             bleClient.write(VehicleMsg.batteryRequest())
+            // Start foreground service for stability
+            DriveSessionService.start(ctx, label = address)
             while (true) {
                 delay(20000)
                 bleClient.write(VehicleMsg.batteryRequest())
@@ -80,7 +96,12 @@ fun DriveScreen(
         ) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("Battery: ${battery?.let { "$it%" } ?: "?"}")
-                Text("Laps: $laps")
+                val lapText = lastLapTimeMs?.let { ms ->
+                    val sec = ms / 1000
+                    val tenths = (ms % 1000) / 100
+                    "Laps: $laps (last: ${sec}.${tenths}s)"
+                } ?: "Laps: $laps"
+                Text(lapText)
             }
 
             Text("Speed: $speed mm/s")
@@ -134,6 +155,7 @@ fun DriveScreen(
                     startPieceId = lastPieceId
                     laps = 0
                     lastLapTs = 0L
+                    lastLapTimeMs = null
                 }) { Text(if (startPieceId == null) "Mark Start" else "Reset Laps") }
                 OutlinedButton(onClick = { onBack() }) { Text("Disconnect") }
             }

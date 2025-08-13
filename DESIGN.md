@@ -43,6 +43,11 @@ Permissions & Lifecycle
 - Pre-12: ACCESS_FINE_LOCATION required for BLE scan.
 - Use a foreground service during a drive session to improve link reliability; persistent notification with car name/address and quick disconnect.
 
+Foreground service implementation
+- DriveSessionService runs as a foreground service (type: connectedDevice) with an ongoing notification.
+- Started on connection from the Drive screen and automatically stops on disconnect or when leaving.
+- Notification includes a Disconnect action that triggers a clean disconnect.
+
 BLE Client Design (core-ble)
 - Scanning: BluetoothLeScanner with ScanFilter on service UUID BE15BEEF... Debounce and de-duplicate results.
 - Connecting: BluetoothDevice.connectGatt; request MTU (e.g., 185); discover GATT; cache read/write characteristic handles.
@@ -66,13 +71,21 @@ UI/UX (feature modules)
   - Allow color selection and forget from list item menu (future).
 - Drive:
   - Speed slider; accelerate/brake buttons; lane left/right buttons.
-  - Indicators: Battery, current speed, lap count.
+  - Indicators: Battery, current speed, lap count and last lap time.
   - Read Battery button for manual refresh (auto polling planned).
   - Disconnect/back button; session foreground notification (future).
+
+Lap timing improvements
+- Parse position (0x27) and transition (0x29) updates. Use parsing flags to detect reverse driving.
+- Count laps only when crossing the marked piece in forward direction with a debounce; record last lap time for display.
 
 Snackbar and navigation
 - When auto-connect triggers, show a snackbar indicating the target car.
 - Current behavior navigates immediately after showing the snackbar; consider adding a small (e.g., 300–500 ms) delay before navigation so users can read the message more consistently. This is optional and deferred.
+
+Auto-connect settings
+- Auto-connect only on Discovery screen (default on) to avoid hijacking other screens.
+- Optional short delay before navigating after the snackbar (default off).
 
 Reliability & Safety
 - Rate-limit commands (e.g., not more than 10 writes/sec), debounced speed slider writes.

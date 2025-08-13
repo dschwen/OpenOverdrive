@@ -21,6 +21,7 @@ import core.ble.AndroidBleClient
 import core.ble.BleDevice
 import data.CarRepository
 import data.CarProfile
+import data.AppSettingsRepository
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
@@ -40,6 +41,7 @@ fun DiscoveryScreen(
     val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
     val carRepo = remember { carRepositoryProvider(bleClient) }
+    val appSettings = remember { AppSettingsRepository(context) }
     val snackbarHostState = remember { SnackbarHostState() }
 
     val permissions = if (Build.VERSION.SDK_INT >= 31) {
@@ -60,6 +62,8 @@ fun DiscoveryScreen(
     val profiles by carRepo.profilesFlow.collectAsState(initial = emptyList())
     val connState by bleClient.connectionState.collectAsState()
     var autoConnectAttempted by remember { mutableStateOf(setOf<String>()) }
+    val onlyOnDiscovery by appSettings.autoConnectOnlyDiscovery.collectAsState(initial = true)
+    val delayEnabled by appSettings.autoConnectDelayEnabled.collectAsState(initial = false)
 
     LaunchedEffect(permissions.allPermissionsGranted) {
         if (!permissions.allPermissionsGranted) return@LaunchedEffect
@@ -68,7 +72,7 @@ fun DiscoveryScreen(
     }
 
     // Auto-connect when a known car with autoConnect=true becomes visible and we're idle.
-    LaunchedEffect(items, profiles, connState) {
+    LaunchedEffect(items, profiles, connState, onlyOnDiscovery) {
         val isIdle = connState is core.ble.ConnectionState.Disconnected
         if (!isIdle) return@LaunchedEffect
         // Prefer most recently connected auto-connect profile that is visible
@@ -82,6 +86,9 @@ fun DiscoveryScreen(
             autoConnectAttempted = autoConnectAttempted + addr
             val label = target.first.displayName ?: target.first.lastSeenName ?: addr
             scope.launch { snackbarHostState.showSnackbar("Auto-connecting to $label") }
+            if (delayEnabled) {
+                kotlinx.coroutines.delay(400)
+            }
             bleClient.connect(addr)
             onConnected(addr)
         }
@@ -104,7 +111,13 @@ fun DiscoveryScreen(
 
             val visibleAddresses = remember(items) { items.map { it.first.address }.toSet() }
 
-            Text("Nearby Devices", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(12.dp))
+            Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text("Nearby Devices", style = MaterialTheme.typography.titleMedium)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Auto-connect only here")
+                    Switch(checked = onlyOnDiscovery, onCheckedChange = { checked -> scope.launch { appSettings.setAutoConnectOnlyDiscovery(checked) } })
+                }
+            }
             LazyColumn(Modifier.fillMaxWidth().weight(1f)) {
                 items(items) { (dev, profile) ->
                     DeviceRow(
@@ -151,9 +164,15 @@ fun DiscoveryScreen(
             }
 
             Spacer(Modifier.height(8.dp))
-            Text("Known Cars", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(12.dp))
+            Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text("Known Cars", style = MaterialTheme.typography.titleMedium)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Delay on auto-connect")
+                    Switch(checked = delayEnabled, onCheckedChange = { checked -> scope.launch { appSettings.setAutoConnectDelayEnabled(checked) } })
+                }
+            }
             LazyColumn(Modifier.fillMaxWidth().weight(1f)) {
-                items(profiles) { prof ->
+                items(profiles.sortedByDescending { it.lastConnected ?: 0L }) { prof ->
                     val isVisible = visibleAddresses.contains(prof.deviceAddress)
                     KnownCarRow(
                         profile = prof,
@@ -249,9 +268,11 @@ private fun KnownCarRow(
     onOpenMenu: (String) -> Unit,
     onSetAutoConnect: (Boolean) -> Unit
 ) {
+    val recentlyUsed = (profile.lastConnected ?: 0L) > (System.currentTimeMillis() - 24L*60*60*1000)
     val subtitle = buildString {
         append(profile.deviceAddress)
         if (!isVisible) append(" • Not visible") else append(" • Visible now")
+        if (recentlyUsed) append(" • Recently used")
     }
     ListItem(
         leadingContent = { profile.colorArgb?.let { ColorSwatch(it) } },

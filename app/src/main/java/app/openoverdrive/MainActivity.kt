@@ -13,8 +13,6 @@ import androidx.navigation.compose.rememberNavController
 import feature.discovery.DiscoveryScreen
 import feature.drive.DriveScreen
 import androidx.compose.ui.platform.LocalContext
-import core.ble.AndroidBleClient
-import core.ble.BleClient
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -31,8 +29,7 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun AppNav(navController: NavHostController = rememberNavController()) {
-    val ctx = LocalContext.current
-    val bleClient: BleClient = remember { AndroidBleClient(ctx) }
+    val bleClient = remember { BleProvider.client }
     NavHost(navController, startDestination = "discovery") {
         composable("discovery") {
             DiscoveryScreen(

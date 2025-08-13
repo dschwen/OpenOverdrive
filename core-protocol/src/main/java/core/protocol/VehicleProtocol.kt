@@ -88,7 +88,8 @@ object VehicleMsg {
 sealed interface VehicleMessage {
     data class BatteryLevel(val raw: Int) : VehicleMessage { val percent: Int = (raw * 100 / 1023).coerceIn(0, 100) }
     data class Version(val version: Int) : VehicleMessage
-    data class PositionUpdate(val speedMmPerSec: Int, val roadPieceId: Int) : VehicleMessage
+    data class PositionUpdate(val speedMmPerSec: Int, val roadPieceId: Int, val reverseDriving: Boolean) : VehicleMessage
+    data class TransitionUpdate(val roadPieceIdx: Int, val roadPieceIdxPrev: Int) : VehicleMessage
 }
 
 object VehicleMsgParser {
@@ -110,16 +111,33 @@ object VehicleMsgParser {
             MsgId.V2C_LOC_POS -> {
                 // size=16 payload in C; we pick fields we need
                 if (size >= 16) {
-                    val locationId = bb.get().toInt() and 0xFF
+                    bb.get() // locationId
                     val roadPieceId = bb.get().toInt() and 0xFF
-                    val offset = bb.float // not used yet
+                    bb.float // offset_from_center
                     val speed = bb.short.toInt() and 0xFFFF
-                    // skip rest
-                    VehicleMessage.PositionUpdate(speed, roadPieceId)
+                    val parsingFlags = bb.get().toInt() and 0xFF
+                    val reverse = (parsingFlags and 0x20) != 0
+                    VehicleMessage.PositionUpdate(speed, roadPieceId, reverse)
+                } else null
+            }
+            MsgId.V2C_LOC_TRANS -> {
+                if (size >= 17) {
+                    val roadPieceIdx = bb.get().toInt() // int8
+                    val prev = bb.get().toInt()
+                    bb.float // offset
+                    bb.get() // last_recv_lane_change_id
+                    bb.get() // last_exec_lane_change_id
+                    bb.short // desired_lane_change_speed
+                    bb.get() // ave_follow_line_drift_pixels
+                    bb.get() // had_lane_change_activity
+                    bb.get() // uphill
+                    bb.get() // downhill
+                    bb.get() // left_wheel_dist
+                    bb.get() // right_wheel_dist
+                    VehicleMessage.TransitionUpdate(roadPieceIdx, prev)
                 } else null
             }
             else -> null
         }
     }
 }
-
