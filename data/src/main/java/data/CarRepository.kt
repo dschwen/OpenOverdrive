@@ -51,9 +51,9 @@ class CarRepository(private val context: Context, private val ble: BleClient) {
                 val o = arr.getJSONObject(i)
                 CarProfile(
                     deviceAddress = o.getString("deviceAddress"),
-                    displayName = o.optString("displayName", null),
+                    displayName = if (o.has("displayName") && !o.isNull("displayName")) o.getString("displayName") else null,
                     colorArgb = if (o.has("colorArgb")) o.getInt("colorArgb") else null,
-                    lastSeenName = o.optString("lastSeenName", null),
+                    lastSeenName = if (o.has("lastSeenName") && !o.isNull("lastSeenName")) o.getString("lastSeenName") else null,
                     lastConnected = if (o.has("lastConnected")) o.getLong("lastConnected") else null,
                     startRoadPieceId = if (o.has("startRoadPieceId")) o.getInt("startRoadPieceId") else null,
                     autoConnect = o.optBoolean("autoConnect", false)

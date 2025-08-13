@@ -24,6 +24,14 @@ android {
                 "proguard-rules.pro"
             )
         }
+        // Installable by tapping (not testOnly), but still uses debug keystore
+        create("internal") {
+            initWith(getByName("debug"))
+            isDebuggable = false
+            signingConfig = signingConfigs.getByName("debug")
+            // Use debug variants of library modules when building 'internal'
+            matchingFallbacks += listOf("debug")
+        }
     }
 
     compileOptions {
