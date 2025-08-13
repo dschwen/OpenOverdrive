@@ -55,6 +55,7 @@ class CarRepository(private val context: Context, private val ble: BleClient) {
                     lastSeenName = o.optString("lastSeenName", null),
                     lastConnected = if (o.has("lastConnected")) o.getLong("lastConnected") else null,
                     startRoadPieceId = if (o.has("startRoadPieceId")) o.getInt("startRoadPieceId") else null,
+                    autoConnect = o.optBoolean("autoConnect", false)
                 )
             }
         }
@@ -69,8 +70,8 @@ class CarRepository(private val context: Context, private val ble: BleClient) {
                     p.lastSeenName?.let { put("lastSeenName", it) }
                     p.lastConnected?.let { put("lastConnected", it) }
                     p.startRoadPieceId?.let { put("startRoadPieceId", it) }
+                    put("autoConnect", p.autoConnect)
                 })
             }
         }.toString()
 }
-

@@ -6,6 +6,6 @@ data class CarProfile(
     val colorArgb: Int? = null,
     val lastSeenName: String? = null,
     val lastConnected: Long? = null,
-    val startRoadPieceId: Int? = null
+    val startRoadPieceId: Int? = null,
+    val autoConnect: Boolean = false
 )
-

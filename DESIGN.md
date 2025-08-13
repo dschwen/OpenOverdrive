@@ -70,6 +70,10 @@ UI/UX (feature modules)
   - Read Battery button for manual refresh (auto polling planned).
   - Disconnect/back button; session foreground notification (future).
 
+Snackbar and navigation
+- When auto-connect triggers, show a snackbar indicating the target car.
+- Current behavior navigates immediately after showing the snackbar; consider adding a small (e.g., 300–500 ms) delay before navigation so users can read the message more consistently. This is optional and deferred.
+
 Reliability & Safety
 - Rate-limit commands (e.g., not more than 10 writes/sec), debounced speed slider writes.
 - Lane-change cooldown and cancel; ensure non-zero forward speed before lane change.
@@ -92,4 +96,3 @@ Notes & References
   - Service/Characteristic UUIDs in vehicle_gatt_profile.h
   - Opcodes and message structs in protocol.h/c
   - Example sequences in examples/vehicle-tool (set_offset + change_lane, speed, battery)
-

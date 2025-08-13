@@ -12,6 +12,9 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import feature.discovery.DiscoveryScreen
 import feature.drive.DriveScreen
+import androidx.compose.ui.platform.LocalContext
+import core.ble.AndroidBleClient
+import core.ble.BleClient
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -28,18 +31,20 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun AppNav(navController: NavHostController = rememberNavController()) {
+    val ctx = LocalContext.current
+    val bleClient: BleClient = remember { AndroidBleClient(ctx) }
     NavHost(navController, startDestination = "discovery") {
         composable("discovery") {
             DiscoveryScreen(
                 onConnected = { deviceAddress ->
                     navController.navigate("drive/$deviceAddress")
-                }
+                },
+                bleClient = bleClient
             )
         }
         composable("drive/{address}") { backStackEntry ->
             val address = backStackEntry.arguments?.getString("address") ?: ""
-            DriveScreen(address = address, onBack = { navController.popBackStack() })
+            DriveScreen(address = address, onBack = { navController.popBackStack() }, bleClient = bleClient)
         }
     }
 }
-
