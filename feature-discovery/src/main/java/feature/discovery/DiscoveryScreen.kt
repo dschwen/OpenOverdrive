@@ -302,8 +302,23 @@ private fun ColorPickerDialog(onDismiss: () -> Unit, onPick: (Int) -> Unit) {
     val colors = listOf(
         0xFFE53935.toInt(), 0xFF43A047.toInt(), 0xFF1E88E5.toInt(), 0xFFFDD835.toInt(),
         0xFFFB8C00.toInt(), 0xFF8E24AA.toInt(), 0xFF00BCD4.toInt(), 0xFF9E9E9E.toInt(),
+        0xFFC0C0C0.toInt(), // Silver
         0xFFFFFFFF.toInt(), 0xFF000000.toInt()
     )
+    var customHex by remember { mutableStateOf("") }
+    var inputError by remember { mutableStateOf<String?>(null) }
+
+    fun parseHex(input: String): Int? {
+        val raw = input.trim().removePrefix("#").uppercase()
+        return try {
+            when (raw.length) {
+                6 -> (0xFF000000.toInt() or raw.toInt(16))
+                8 -> raw.toLong(16).toInt()
+                else -> null
+            }
+        } catch (_: Throwable) { null }
+    }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Pick a color") },
@@ -318,6 +333,26 @@ private fun ColorPickerDialog(onDismiss: () -> Unit, onPick: (Int) -> Unit) {
                                 .clickable { onPick(c) }
                         )
                     }
+                }
+                HorizontalDivider()
+                Text("Custom (hex #RRGGBB or #AARRGGBB)")
+                OutlinedTextField(
+                    value = customHex,
+                    onValueChange = {
+                        customHex = it
+                        inputError = null
+                    },
+                    singleLine = true,
+                    isError = inputError != null,
+                    supportingText = { inputError?.let { Text(it) } },
+                    placeholder = { Text("#C0C0C0") }
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Button(onClick = {
+                        val parsed = parseHex(customHex)
+                        if (parsed != null) onPick(parsed) else inputError = "Invalid hex"
+                    }) { Text("Apply") }
+                    TextButton(onClick = { customHex = "#C0C0C0" }) { Text("Silver") }
                 }
             }
         },

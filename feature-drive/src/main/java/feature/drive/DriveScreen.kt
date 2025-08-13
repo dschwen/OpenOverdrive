@@ -77,7 +77,12 @@ fun DriveScreen(
                 if (!initSent) {
                     initSent = true
                     try { client.enableNotifications() } catch (_: Throwable) {}
-                    client.write(VehicleMsg.sdkMode(true))
+                    // Small handshake to ensure car accepts commands
+                    delay(150)
+                    repeat(2) {
+                        client.write(VehicleMsg.sdkMode(true))
+                        delay(120)
+                    }
                     client.write(VehicleMsg.batteryRequest())
                     while (true) {
                         delay(30000)
