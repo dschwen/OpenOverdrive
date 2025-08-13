@@ -73,7 +73,8 @@ fun DriveScreen(
     LaunchedEffect(connState) {
         if (connState is ConnectionState.Connected && !initSent) {
             initSent = true
-            // Enable SDK mode and fetch battery, then poll every 20s
+            // Ensure notifications are enabled, then enable SDK mode and fetch battery; poll every 20s
+            try { client.enableNotifications() } catch (_: Throwable) {}
             client.write(VehicleMsg.sdkMode(true))
             client.write(VehicleMsg.batteryRequest())
             while (true) {

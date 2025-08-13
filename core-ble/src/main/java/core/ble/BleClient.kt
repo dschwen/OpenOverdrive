@@ -21,7 +21,7 @@ interface BleClient {
     suspend fun enableNotifications(): Boolean
     fun notifications(): Flow<ByteArray>
 
-    suspend fun write(bytes: ByteArray, withResponse: Boolean = false): Boolean
+    suspend fun write(bytes: ByteArray, withResponse: Boolean = true): Boolean
 }
 
 /**
@@ -48,4 +48,3 @@ class FakeBleClient : BleClient {
 
     override suspend fun write(bytes: ByteArray, withResponse: Boolean): Boolean = true
 }
-

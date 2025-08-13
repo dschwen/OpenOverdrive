@@ -3,6 +3,8 @@ package app.openoverdrive
 import android.Manifest
 import android.os.Build
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
@@ -12,6 +14,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -23,7 +26,7 @@ import core.ble.ConnectionState
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalPermissionsApi::class)
+@OptIn(ExperimentalPermissionsApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun DiagnosticsScreen(
     onBack: () -> Unit,
@@ -65,7 +68,14 @@ fun DiagnosticsScreen(
     Scaffold(
         topBar = { TopAppBar(title = { Text("Diagnostics") }) }
     ) { padding ->
-        Column(Modifier.padding(padding).padding(16.dp).fillMaxSize()) {
+        val scroll = rememberScrollState()
+        Column(
+            Modifier
+                .padding(padding)
+                .padding(16.dp)
+                .fillMaxSize()
+                .verticalScroll(scroll)
+        ) {
             Text(
                 text = "Connection: " + when (val c = conn) {
                     is ConnectionState.Connected -> "Connected to ${c.address}"
@@ -94,6 +104,11 @@ fun DiagnosticsScreen(
                 OutlinedButton(onClick = { scope.launch { lastWriteOk = bleClient.write(core.protocol.VehicleMsg.ping()) } }) { Text("Ping") }
                 OutlinedButton(onClick = { scope.launch { lastWriteOk = bleClient.write(core.protocol.VehicleMsg.batteryRequest()) } }) { Text("Battery req") }
                 OutlinedButton(onClick = { scope.launch { lastWriteOk = bleClient.write(core.protocol.VehicleMsg.sdkMode(true)) } }) { Text("SDK on") }
+            }
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedButton(onClick = { scope.launch { lastWriteOk = bleClient.write(core.protocol.VehicleMsg.setSpeed(600, 25000)) } }) { Text("Test speed") }
+                OutlinedButton(onClick = { scope.launch { lastWriteOk = bleClient.write(core.protocol.VehicleMsg.setSpeed(0, 30000)) } }) { Text("Brake") }
             }
             Spacer(Modifier.height(8.dp))
             Text("Notifications: $notifCount packets" + (notifEnabled?.let { " (enabled: $it)" } ?: ""))

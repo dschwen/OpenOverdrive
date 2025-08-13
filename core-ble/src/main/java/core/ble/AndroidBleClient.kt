@@ -120,6 +120,8 @@ class AndroidBleClient(private val context: Context) : BleClient {
                 // No-op
             }
 
+            @Deprecated("Legacy callback for API < 33")
+            @Suppress("DEPRECATION")
             override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic) {
                 if (characteristic.uuid == AnkiUuids.READ_CHAR) {
                     characteristic.value?.let { bytes -> notifyFlow.tryEmit(bytes.copyOf()) }
@@ -157,21 +159,36 @@ class AndroidBleClient(private val context: Context) : BleClient {
         val r = readChar ?: return false
         g.setCharacteristicNotification(r, true)
         val cccd = r.getDescriptor(CCCD_UUID) ?: return false
-        cccd.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
         return suspendCancellableCoroutine { cont ->
-            val ok = g.writeDescriptor(cccd)
-            if (!ok) {
-                // Some stacks prefer indications; try that as a fallback
-                try {
-                    cccd.value = BluetoothGattDescriptor.ENABLE_INDICATION_VALUE
-                    val ok2 = g.writeDescriptor(cccd)
-                    if (!ok2) cont.resume(false) else appScope.launch { cont.resume(true) }
-                } catch (_: Throwable) {
-                    cont.resume(false)
+            if (Build.VERSION.SDK_INT >= 33) {
+                // Preferred API 33+ path without using deprecated cccd.value
+                val status = g.writeDescriptor(cccd, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)
+                if (status == BluetoothStatusCodes.SUCCESS) {
+                    appScope.launch { cont.resume(true) }
+                } else {
+                    // Fallback to indications
+                    val status2 = g.writeDescriptor(cccd, BluetoothGattDescriptor.ENABLE_INDICATION_VALUE)
+                    if (status2 == BluetoothStatusCodes.SUCCESS) appScope.launch { cont.resume(true) } else cont.resume(false)
                 }
-            } else appScope.launch {
-                // There is no guaranteed callback for descriptor write success in all cases; resume optimistically.
-                cont.resume(true)
+            } else {
+                @Suppress("DEPRECATION")
+                run {
+                    @Suppress("DEPRECATION")
+                    cccd.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+                    @Suppress("DEPRECATION")
+                    val ok = g.writeDescriptor(cccd)
+                    if (!ok) {
+                        try {
+                            @Suppress("DEPRECATION")
+                            run { cccd.value = BluetoothGattDescriptor.ENABLE_INDICATION_VALUE }
+                            @Suppress("DEPRECATION")
+                            val ok2 = g.writeDescriptor(cccd)
+                            if (!ok2) cont.resume(false) else appScope.launch { cont.resume(true) }
+                        } catch (_: Throwable) {
+                            cont.resume(false)
+                        }
+                    } else appScope.launch { cont.resume(true) }
+                }
             }
         }
     }
@@ -204,17 +221,21 @@ class AndroidBleClient(private val context: Context) : BleClient {
 
     @SuppressLint("MissingPermission")
     private fun writeOnce(g: BluetoothGatt, w: BluetoothGattCharacteristic, data: ByteArray, withResponse: Boolean): Boolean {
-        val type = if (withResponse) BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT else BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
-        return if (Build.VERSION.SDK_INT >= 33) {
-            g.writeCharacteristic(w, data, type) == BluetoothStatusCodes.SUCCESS
-        } else {
-            w.writeType = type
-            @Suppress("DEPRECATION")
-            w.value = data
-            pendingWriteContinuation = { /* legacy path doesn't get callback status reliably */ }
-            @Suppress("DEPRECATION")
-            g.writeCharacteristic(w)
+        fun attempt(type: Int): Boolean {
+            return if (Build.VERSION.SDK_INT >= 33) {
+                g.writeCharacteristic(w, data, type) == BluetoothStatusCodes.SUCCESS
+            } else {
+                w.writeType = type
+                @Suppress("DEPRECATION")
+                w.value = data
+                pendingWriteContinuation = { /* legacy path doesn't get callback status reliably */ }
+                @Suppress("DEPRECATION")
+                g.writeCharacteristic(w)
+            }
         }
+        val first = if (withResponse) BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT else BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
+        val second = if (withResponse) BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE else BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+        return attempt(first) || attempt(second)
     }
 
     @SuppressLint("MissingPermission")
