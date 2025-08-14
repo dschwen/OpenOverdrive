@@ -52,6 +52,8 @@ fun DiagnosticsScreen(
     var lastNotif by remember { mutableStateOf<String>("") }
     var lastWriteOk by remember { mutableStateOf<Boolean?>(null) }
     var notifEnabled by remember { mutableStateOf<Boolean?>(null) }
+    var lastBatteryMv by remember { mutableStateOf<Int?>(null) }
+    var lastBatteryPct by remember { mutableStateOf<Int?>(null) }
     var sdkEnabled by remember { mutableStateOf(false) }
 
     LaunchedEffect(scanning, permissions.allPermissionsGranted) {
@@ -63,6 +65,15 @@ fun DiagnosticsScreen(
         bleClient.notifications().collect { bytes ->
             notifCount += 1
             lastNotif = bytes.take(16).joinToString(" ") { b -> "%02X".format(b) }
+            // Try to parse battery packets for visibility
+            core.protocol.VehicleMsgParser.parse(bytes)?.let { msg ->
+                if (msg is core.protocol.VehicleMessage.BatteryLevel) {
+                    val raw = msg.raw
+                    val mv = if (raw in 2500..5000) raw else null
+                    lastBatteryMv = mv
+                    lastBatteryPct = msg.percent
+                }
+            }
         }
     }
 
@@ -149,6 +160,10 @@ fun DiagnosticsScreen(
             Text("Notifications: $notifCount packets" + (notifEnabled?.let { " (enabled: $it)" } ?: ""))
             if (lastWriteOk != null) Text("Last write ok: $lastWriteOk")
             if (lastNotif.isNotEmpty()) Text("Last (first 16B): $lastNotif")
+            lastBatteryPct?.let { pct ->
+                val detail = lastBatteryMv?.let { mv -> " (${mv}mV)" } ?: ""
+                Text("Battery parsed: ${pct}%$detail")
+            }
 
             Spacer(Modifier.height(12.dp))
             Text("Discovered devices (${devices.size})", style = MaterialTheme.typography.titleMedium)

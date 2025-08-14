@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
@@ -34,9 +33,6 @@ import core.ble.BleDevice
 import data.CarRepository
 import data.CarProfile
 import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.filter
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalPermissionsApi::class, ExperimentalMaterial3Api::class)
@@ -66,7 +62,6 @@ fun DiscoveryScreen(
 
     var items by remember { mutableStateOf<List<Pair<BleDevice, CarProfile?>>>(emptyList()) }
     var menuForAddress by remember { mutableStateOf<String?>(null) }
-    var connectingAddress by remember { mutableStateOf<String?>(null) }
     var colorPickerFor by remember { mutableStateOf<Pair<String, CarProfile?>?>(null) }
     var nameEditorFor by remember { mutableStateOf<Pair<String, CarProfile?>?>(null) }
     var confirmForgetFor by remember { mutableStateOf<String?>(null) }
@@ -110,40 +105,18 @@ fun DiscoveryScreen(
                     DeviceRow(
                         device = dev,
                         profile = profile,
-                        isConnecting = connectingAddress == dev.address,
                         menuExpanded = menuForAddress == dev.address,
                         onOpenMenu = { addr -> menuForAddress = addr },
                         onDismissMenu = { menuForAddress = null },
                         onConnect = {
-                            if (connectingAddress != null) return@DeviceRow
                             scope.launch {
                                 val updated = (profile ?: CarProfile(deviceAddress = dev.address)).copy(
                                     lastSeenName = dev.name,
                                     lastConnected = System.currentTimeMillis()
                                 )
                                 carRepo.upsertProfile(updated)
-                                connectingAddress = dev.address
-                                var success = false
-                                repeat(3) { attempt ->
-                                    // Ensure any previous session is closed
-                                    runCatching { client.disconnect() }
-                                    kotlinx.coroutines.delay(200)
-                                    client.connect(dev.address)
-                                    val ok = withTimeoutOrNull(8_000) {
-                                        client.connectionState
-                                            .filter { it is core.ble.ConnectionState.Connected && it.address == dev.address }
-                                            .first()
-                                        true
-                                    } ?: false
-                                    if (ok) { success = true; return@repeat }
-                                }
-                                if (success) {
-                                    connectingAddress = null
-                                    onConnected(dev.address)
-                                } else {
-                                    connectingAddress = null
-                                    snackbarHostState.showSnackbar("Connection failed")
-                                }
+                                client.connect(dev.address)
+                                onConnected(dev.address)
                             }
                         },
                         onPickColor = {
@@ -221,7 +194,6 @@ fun DiscoveryScreen(
 private fun DeviceRow(
     device: BleDevice,
     profile: CarProfile?,
-    isConnecting: Boolean,
     menuExpanded: Boolean,
     onConnect: () -> Unit,
     onOpenMenu: (String) -> Unit,
@@ -256,12 +228,8 @@ private fun DeviceRow(
         },
         trailingContent = {
             Box {
-                if (isConnecting) {
-                    CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
-                } else {
-                    IconButton(onClick = { onOpenMenu(device.address) }) {
-                        Icon(Icons.Filled.MoreVert, contentDescription = "More")
-                    }
+                IconButton(onClick = { onOpenMenu(device.address) }) {
+                    Icon(Icons.Filled.MoreVert, contentDescription = "More")
                 }
                 DropdownMenu(expanded = menuExpanded, onDismissRequest = onDismissMenu) {
                     DropdownMenuItem(

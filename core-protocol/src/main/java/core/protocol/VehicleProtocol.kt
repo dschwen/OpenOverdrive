@@ -92,7 +92,14 @@ object VehicleMsg {
 }
 
 sealed interface VehicleMessage {
-    data class BatteryLevel(val raw: Int) : VehicleMessage { val percent: Int = (raw * 100 / 1023).coerceIn(0, 100) }
+    data class BatteryLevel(val raw: Int) : VehicleMessage {
+        // Some firmware report battery in millivolts (e.g., 3300..4200), others as 0..100.
+        // Heuristic: if raw looks like mV, map 3.3V..4.2V to 0..100%; otherwise use low byte as percent.
+        val percent: Int = when {
+            raw in 2500..5000 -> (((raw - 3300).coerceIn(0, 900)) * 100 / 900)
+            else -> (raw and 0xFF).coerceIn(0, 100)
+        }
+    }
     data class Version(val version: Int) : VehicleMessage
     data class PositionUpdate(val speedMmPerSec: Int, val roadPieceId: Int, val reverseDriving: Boolean) : VehicleMessage
     data class TransitionUpdate(val roadPieceIdx: Int, val roadPieceIdxPrev: Int) : VehicleMessage
