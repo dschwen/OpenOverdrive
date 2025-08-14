@@ -38,25 +38,26 @@ fun DriveScreen(
     var lastLapTimeMs by remember { mutableStateOf<Long?>(null) }
     var laneTag by remember { mutableStateOf(0) }
 
+    var wasOnMarker by remember { mutableStateOf(false) }
     LaunchedEffect(address) {
         client.notifications().collectLatest { bytes ->
             when (val msg = VehicleMsgParser.parse(bytes)) {
                 is VehicleMessage.BatteryLevel -> battery = msg.percent
                 is VehicleMessage.PositionUpdate -> {
                     val rp = msg.roadPieceId
-                    if (lastPieceId != rp) {
-                        val marker = startPieceId
-                        val forward = !msg.reverseDriving
-                        if (marker != null && rp == marker && forward) {
-                            val now = System.currentTimeMillis()
-                            if (now - lastLapTs > 3000) {
-                                laps += 1
-                                lastLapTimeMs = if (lastLapTs == 0L) null else now - lastLapTs
-                                lastLapTs = now
-                            }
+                    lastPieceId = rp
+                    val marker = startPieceId
+                    val onMarker = (marker != null && rp == marker)
+                    if (onMarker && !wasOnMarker) {
+                        val now = System.currentTimeMillis()
+                        // Require movement to avoid counting when stationary
+                        if (now - lastLapTs > 3000 && msg.speedMmPerSec > 100) {
+                            laps += 1
+                            lastLapTimeMs = if (lastLapTs == 0L) null else now - lastLapTs
+                            lastLapTs = now
                         }
-                        lastPieceId = rp
                     }
+                    wasOnMarker = onMarker
                 }
                 is VehicleMessage.TransitionUpdate -> {
                     val rp = msg.roadPieceIdx
@@ -115,6 +116,9 @@ fun DriveScreen(
                 Text(lapText)
             }
 
+            // Debug line for lap logic visibility
+            Text("Piece: ${lastPieceId ?: -1}  Marker: ${startPieceId ?: -1}")
+
             Text("Speed: $speed mm/s")
             Slider(
                 value = speed.toFloat(),
@@ -167,24 +171,38 @@ fun DriveScreen(
 
             Spacer(Modifier.weight(1f))
 
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                OutlinedButton(onClick = { scope.launch { client.write(VehicleMsg.batteryRequest()) } }) {
-                    Text("Read Battery")
-                }
-                OutlinedButton(onClick = {
-                    startPieceId = lastPieceId
-                    laps = 0
-                    lastLapTs = 0L
-                    lastLapTimeMs = null
-                }) { Text(if (startPieceId == null) "Mark Start" else "Reset Laps") }
-                OutlinedButton(onClick = {
-                    scope.launch {
-                        runCatching { client.write(VehicleMsg.setSpeed(0, 30000, 1)) }
-                        delay(150)
-                        client.disconnect()
-                        onBack()
-                    }
-                }) { Text("Disconnect") }
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                OutlinedButton(
+                    onClick = { scope.launch { client.write(VehicleMsg.batteryRequest()) } },
+                    modifier = Modifier.weight(1f).height(48.dp)
+                ) { Text("Read Battery", maxLines = 1) }
+
+                OutlinedButton(
+                    onClick = {
+                        startPieceId = lastPieceId
+                        wasOnMarker = true // require leaving and re-entering to count
+                        laps = 0
+                        lastLapTs = 0L
+                        lastLapTimeMs = null
+                    },
+                    modifier = Modifier.weight(1f).height(48.dp)
+                ) { Text(if (startPieceId == null) "Mark Start" else "Reset Laps", maxLines = 1) }
+
+                OutlinedButton(
+                    onClick = {
+                        scope.launch {
+                            runCatching { client.write(VehicleMsg.setSpeed(0, 30000, 1)) }
+                            delay(150)
+                            client.disconnect()
+                            onBack()
+                        }
+                    },
+                    modifier = Modifier.weight(1f).height(48.dp)
+                ) { Text("Disconnect", maxLines = 1) }
             }
         }
     }

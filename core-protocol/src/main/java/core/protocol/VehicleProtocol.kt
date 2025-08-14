@@ -101,7 +101,13 @@ sealed interface VehicleMessage {
         }
     }
     data class Version(val version: Int) : VehicleMessage
-    data class PositionUpdate(val speedMmPerSec: Int, val roadPieceId: Int, val reverseDriving: Boolean) : VehicleMessage
+    data class PositionUpdate(
+        val locationId: Int,
+        val roadPieceId: Int,
+        val offsetFromCenter: Float,
+        val speedMmPerSec: Int,
+        val clockwise: Boolean,
+    ) : VehicleMessage
     data class TransitionUpdate(val roadPieceIdx: Int, val roadPieceIdxPrev: Int) : VehicleMessage
 }
 
@@ -122,15 +128,14 @@ object VehicleMsgParser {
                 VehicleMessage.Version(version)
             }
             MsgId.V2C_LOC_POS -> {
-                // size=16 payload in C; we pick fields we need
-                if (size >= 16) {
-                    bb.get() // locationId
+                // Layout: uint8 locationId, uint8 piece, float offset_mm, uint16 speed_mmps, uint8 clockwise
+                if (size >= 9) {
+                    val locationId = bb.get().toInt() and 0xFF
                     val roadPieceId = bb.get().toInt() and 0xFF
-                    bb.float // offset_from_center
+                    val offset = bb.float
                     val speed = bb.short.toInt() and 0xFFFF
-                    val parsingFlags = bb.get().toInt() and 0xFF
-                    val reverse = (parsingFlags and 0x20) != 0
-                    VehicleMessage.PositionUpdate(speed, roadPieceId, reverse)
+                    val clockwise = (bb.get().toInt() and 0xFF) != 0
+                    VehicleMessage.PositionUpdate(locationId, roadPieceId, offset, speed, clockwise)
                 } else null
             }
             MsgId.V2C_LOC_TRANS -> {
