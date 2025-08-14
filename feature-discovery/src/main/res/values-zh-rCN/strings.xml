@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ood_discover_connect_title">发现与连接</string>
+    <string name="ood_diagnostics">诊断</string>
+    <string name="ood_bt_permissions_required">扫描需要蓝牙权限。</string>
+    <string name="ood_grant_permissions">授予权限</string>
+    <string name="ood_nearby_devices">附近的设备</string>
+    <string name="ood_set_color">设置颜色</string>
+    <string name="ood_edit_name">编辑名称</string>
+    <string name="ood_forget">忘记</string>
+    <string name="ood_forget_title">忘记此车辆？</string>
+    <string name="ood_forget_message">删除 %1$s 的已保存名称和颜色？</string>
+    <string name="ood_cancel">取消</string>
+    <string name="ood_apply_forget">忘记</string>
+    <string name="ood_pick_color">选择颜色</string>
+    <string name="ood_gradient">渐变</string>
+    <string name="ood_stop_a">A 点</string>
+    <string name="ood_stop_b">B 点</string>
+    <string name="ood_hue">色相</string>
+    <string name="ood_saturation">饱和度</string>
+    <string name="ood_value">明度</string>
+    <string name="ood_use">使用</string>
+    <string name="ood_close">关闭</string>
+</resources>

@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ood_discover_connect_title">Entdecken &amp; Verbinden</string>
+    <string name="ood_diagnostics">Diagnose</string>
+    <string name="ood_bt_permissions_required">Bluetooth-Berechtigungen zum Scannen erforderlich.</string>
+    <string name="ood_grant_permissions">Berechtigungen erteilen</string>
+    <string name="ood_nearby_devices">In der Nähe</string>
+    <string name="ood_set_color">Farbe festlegen</string>
+    <string name="ood_edit_name">Name bearbeiten</string>
+    <string name="ood_forget">Vergessen</string>
+    <string name="ood_forget_title">Auto vergessen?</string>
+    <string name="ood_forget_message">Gespeicherten Namen und Farbe für %1$s entfernen?</string>
+    <string name="ood_cancel">Abbrechen</string>
+    <string name="ood_apply_forget">Vergessen</string>
+    <string name="ood_pick_color">Farbe auswählen</string>
+    <string name="ood_gradient">Verlauf</string>
+    <string name="ood_stop_a">Stopp A</string>
+    <string name="ood_stop_b">Stopp B</string>
+    <string name="ood_hue">Farbton</string>
+    <string name="ood_saturation">Sättigung</string>
+    <string name="ood_value">Helligkeit</string>
+    <string name="ood_use">Übernehmen</string>
+    <string name="ood_close">Schließen</string>
+</resources>

@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ood_discover_connect_title">検出と接続</string>
+    <string name="ood_diagnostics">診断</string>
+    <string name="ood_bt_permissions_required">スキャンにはBluetoothの許可が必要です。</string>
+    <string name="ood_grant_permissions">許可する</string>
+    <string name="ood_nearby_devices">近くのデバイス</string>
+    <string name="ood_set_color">色を設定</string>
+    <string name="ood_edit_name">名前を編集</string>
+    <string name="ood_forget">削除</string>
+    <string name="ood_forget_title">車両を削除しますか？</string>
+    <string name="ood_forget_message">%1$s の保存された名前と色を削除しますか？</string>
+    <string name="ood_cancel">キャンセル</string>
+    <string name="ood_apply_forget">削除</string>
+    <string name="ood_pick_color">色を選択</string>
+    <string name="ood_gradient">グラデーション</string>
+    <string name="ood_stop_a">ストップ A</string>
+    <string name="ood_stop_b">ストップ B</string>
+    <string name="ood_hue">色相</string>
+    <string name="ood_saturation">彩度</string>
+    <string name="ood_value">明度</string>
+    <string name="ood_use">使用</string>
+    <string name="ood_close">閉じる</string>
+</resources>

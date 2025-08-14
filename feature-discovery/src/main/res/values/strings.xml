@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ood_discover_connect_title">Discover &amp; Connect</string>
+    <string name="ood_diagnostics">Diagnostics</string>
+    <string name="ood_bt_permissions_required">Bluetooth permissions required to scan.</string>
+    <string name="ood_grant_permissions">Grant Permissions</string>
+    <string name="ood_nearby_devices">Nearby Devices</string>
+    <string name="ood_set_color">Set Color</string>
+    <string name="ood_edit_name">Edit Name</string>
+    <string name="ood_forget">Forget</string>
+    <string name="ood_forget_title">Forget car?</string>
+    <string name="ood_forget_message">Remove saved name and color for %1$s?</string>
+    <string name="ood_cancel">Cancel</string>
+    <string name="ood_apply_forget">Forget</string>
+    <string name="ood_pick_color">Pick a color</string>
+    <string name="ood_gradient">Gradient</string>
+    <string name="ood_stop_a">Stop A</string>
+    <string name="ood_stop_b">Stop B</string>
+    <string name="ood_hue">Hue</string>
+    <string name="ood_saturation">Saturation</string>
+    <string name="ood_value">Value</string>
+    <string name="ood_use">Use</string>
+    <string name="ood_close">Close</string>
+</resources>

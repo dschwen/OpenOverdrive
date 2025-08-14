@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ood_discover_connect_title">Descubrir y Conectar</string>
+    <string name="ood_diagnostics">Diagnóstico</string>
+    <string name="ood_bt_permissions_required">Se requieren permisos de Bluetooth para escanear.</string>
+    <string name="ood_grant_permissions">Conceder permisos</string>
+    <string name="ood_nearby_devices">Dispositivos cercanos</string>
+    <string name="ood_set_color">Establecer color</string>
+    <string name="ood_edit_name">Editar nombre</string>
+    <string name="ood_forget">Olvidar</string>
+    <string name="ood_forget_title">¿Olvidar coche?</string>
+    <string name="ood_forget_message">¿Eliminar el nombre y color guardados para %1$s?</string>
+    <string name="ood_cancel">Cancelar</string>
+    <string name="ood_apply_forget">Olvidar</string>
+    <string name="ood_pick_color">Elegir color</string>
+    <string name="ood_gradient">Degradado</string>
+    <string name="ood_stop_a">Punto A</string>
+    <string name="ood_stop_b">Punto B</string>
+    <string name="ood_hue">Tono</string>
+    <string name="ood_saturation">Saturación</string>
+    <string name="ood_value">Valor</string>
+    <string name="ood_use">Usar</string>
+    <string name="ood_close">Cerrar</string>
+</resources>

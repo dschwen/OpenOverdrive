@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ood_discover_connect_title">Découvrir &amp; Connecter</string>
+    <string name="ood_diagnostics">Diagnostics</string>
+    <string name="ood_bt_permissions_required">Autorisations Bluetooth requises pour l’analyse.</string>
+    <string name="ood_grant_permissions">Autoriser</string>
+    <string name="ood_nearby_devices">Appareils à proximité</string>
+    <string name="ood_set_color">Définir la couleur</string>
+    <string name="ood_edit_name">Modifier le nom</string>
+    <string name="ood_forget">Oublier</string>
+    <string name="ood_forget_title">Oublier la voiture ?</string>
+    <string name="ood_forget_message">Supprimer le nom et la couleur enregistrés pour %1$s ?</string>
+    <string name="ood_cancel">Annuler</string>
+    <string name="ood_apply_forget">Oublier</string>
+    <string name="ood_pick_color">Choisir une couleur</string>
+    <string name="ood_gradient">Dégradé</string>
+    <string name="ood_stop_a">Point A</string>
+    <string name="ood_stop_b">Point B</string>
+    <string name="ood_hue">Teinte</string>
+    <string name="ood_saturation">Saturation</string>
+    <string name="ood_value">Valeur</string>
+    <string name="ood_use">Utiliser</string>
+    <string name="ood_close">Fermer</string>
+</resources>

@@ -53,6 +53,8 @@ class CarRepository(private val context: Context, private val ble: BleClient) {
                     deviceAddress = o.getString("deviceAddress"),
                     displayName = if (o.has("displayName") && !o.isNull("displayName")) o.getString("displayName") else null,
                     colorArgb = if (o.has("colorArgb")) o.getInt("colorArgb") else null,
+                    colorStartArgb = if (o.has("colorStartArgb")) o.getInt("colorStartArgb") else null,
+                    colorEndArgb = if (o.has("colorEndArgb")) o.getInt("colorEndArgb") else null,
                     lastSeenName = if (o.has("lastSeenName") && !o.isNull("lastSeenName")) o.getString("lastSeenName") else null,
                     lastConnected = if (o.has("lastConnected")) o.getLong("lastConnected") else null,
                     startRoadPieceId = if (o.has("startRoadPieceId")) o.getInt("startRoadPieceId") else null,
@@ -68,6 +70,8 @@ class CarRepository(private val context: Context, private val ble: BleClient) {
                     put("deviceAddress", p.deviceAddress)
                     p.displayName?.let { put("displayName", it) }
                     p.colorArgb?.let { put("colorArgb", it) }
+                    p.colorStartArgb?.let { put("colorStartArgb", it) }
+                    p.colorEndArgb?.let { put("colorEndArgb", it) }
                     p.lastSeenName?.let { put("lastSeenName", it) }
                     p.lastConnected?.let { put("lastConnected", it) }
                     p.startRoadPieceId?.let { put("startRoadPieceId", it) }
