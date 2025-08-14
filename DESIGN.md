@@ -155,6 +155,37 @@ Open Questions / Research
 - Determine if weapons/damage need anti‑cheat or authoritative host.
 - Battery modeling: learn discharge curve vs mV for better state‑of‑charge; show health and predicted runtime.
 
+Session Implementation Notes (2025-08)
+
+- BLE Reliability & Handshake
+  - On GATT services discovered, BLE layer enables notifications; Drive additionally retries notifications up to 3× and sends sdkMode(true) 3× with short delays to handle power-cycle cases.
+  - Disconnect always issues a stop command first.
+
+- Protocol Parsing
+  - 0x27 Location parsed as <locationId, piece, offset_mm, speed_mmps, clockwise>.
+  - Battery: percent heuristic (mV mapping 3.3–4.2V → 0–100% else low byte → %).
+
+- Lap Counting
+  - User marks a start piece; lap increments when transitioning from off→on marker with speed>100 mm/s and ≥3s since last lap.
+  - Debug text shows current piece and marker; consider direction-aware counting.
+
+- Discovery & Naming
+  - Simplified list (no known-cars, no auto-connect). Overflow menu anchored near tap; confirmation on forget.
+  - Device name defaults from advertised name; if absent, map manufacturer model_id to known names (Kourai, Boson, Rho, Katal, GroundShock, Skull).
+  - Drive title uses displayName (passed via nav) instead of BT address.
+
+- Color & UI
+  - Two-stop gradient picker with HSV sliders, live preview, and preset swatches (incl. Silver). Gradient swatches/bars rendered in list.
+  - Drive controls: 4-row grid (Accelerate; Left+Right; Decelerate; Brake) with color-coded buttons and haptics (stronger brake).
+
+- Localization
+  - Discovery strings localized (en, de, fr, es, ja, zh-CN) with prefixed resource keys to avoid collisions.
+
+Future Considerations
+  - Manufacturer-specific data parsing should identify the correct companyId and guard against non-Anki devices.
+  - Consider persisting the per-car start marker and direction, and adding a minimap based on stitched piece geometry.
+  - Optionally surface raw telemetry (piece/speed/clockwise) in a hidden debug panel.
+
 
 Notes & References
 - Derived from Anki drive-sdk headers:

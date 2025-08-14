@@ -16,6 +16,8 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.material3.ExperimentalMaterial3Api
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -28,6 +30,7 @@ fun DriveScreen(
 ) {
     val scope = rememberCoroutineScope()
     val ctx = LocalContext.current
+    val haptic = LocalHapticFeedback.current
     val client = bleClient ?: remember { AndroidBleClient(ctx) }
     var speed by remember { mutableStateOf(0) }
     var battery by remember { mutableStateOf<Int?>(null) }
@@ -150,6 +153,7 @@ fun DriveScreen(
             // Accelerate (full width)
             Button(
                 onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                     speed = (speed + 150).coerceAtMost(1500)
                     scope.launch { client.write(VehicleMsg.setSpeed(speed, 25000, 1)) }
                 },
@@ -161,6 +165,7 @@ fun DriveScreen(
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Button(
                     onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         scope.launch {
                             val fwd = if (speed < 300) 300 else speed
                             client.write(VehicleMsg.setSpeed(fwd, 25000, 1))
@@ -177,6 +182,7 @@ fun DriveScreen(
 
                 Button(
                     onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         scope.launch {
                             val fwd = if (speed < 300) 300 else speed
                             client.write(VehicleMsg.setSpeed(fwd, 25000, 1))
@@ -195,6 +201,7 @@ fun DriveScreen(
             // Decelerate (full width)
             Button(
                 onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                     speed = (speed - 150).coerceAtLeast(0)
                     scope.launch { client.write(VehicleMsg.setSpeed(speed, if (speed == 0) 30000 else 25000, 1)) }
                 },
@@ -205,6 +212,12 @@ fun DriveScreen(
             // Brake (full width)
             Button(
                 onClick = {
+                    // Stronger haptic for brake: double pulse
+                    scope.launch {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        delay(80)
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    }
                     speed = 0
                     scope.launch { client.write(VehicleMsg.setSpeed(0, 30000, 1)) }
                 },
