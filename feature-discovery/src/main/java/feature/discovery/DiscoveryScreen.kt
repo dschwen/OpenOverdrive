@@ -110,13 +110,16 @@ fun DiscoveryScreen(
                         onDismissMenu = { menuForAddress = null },
                         onConnect = {
                             scope.launch {
+                                val defaultName = profile?.displayName ?: dev.name ?: "Anki Vehicle"
                                 val updated = (profile ?: CarProfile(deviceAddress = dev.address)).copy(
+                                    displayName = profile?.displayName ?: defaultName,
                                     lastSeenName = dev.name,
                                     lastConnected = System.currentTimeMillis()
                                 )
                                 carRepo.upsertProfile(updated)
                                 client.connect(dev.address)
-                                onConnected(dev.address)
+                                // Navigate with name for Drive title
+                                onConnected(dev.address + "?name=" + java.net.URLEncoder.encode(defaultName, "UTF-8"))
                             }
                         },
                         onPickColor = {

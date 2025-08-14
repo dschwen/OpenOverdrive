@@ -22,6 +22,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 @Composable
 fun DriveScreen(
     address: String,
+    displayName: String? = null,
     onBack: () -> Unit,
     bleClient: BleClient? = null
 ) {
@@ -77,12 +78,19 @@ fun DriveScreen(
             is ConnectionState.Connected -> {
                 if (!initSent) {
                     initSent = true
-                    try { client.enableNotifications() } catch (_: Throwable) {}
-                    // Small handshake to ensure car accepts commands
+                    // Robust handshake: ensure notifications, then set SDK mode with retries
+                    var notified = false
+                    repeat(3) {
+                        try {
+                            if (client.enableNotifications()) { notified = true; return@repeat }
+                        } catch (_: Throwable) {}
+                        delay(150)
+                    }
+                    // Even if notifications didn't report success, proceed but be conservative with timing
                     delay(150)
-                    repeat(2) {
+                    repeat(3) {
                         client.write(VehicleMsg.sdkMode(true))
-                        delay(120)
+                        delay(150)
                     }
                     client.write(VehicleMsg.batteryRequest())
                     while (true) {
@@ -98,7 +106,8 @@ fun DriveScreen(
         }
     }
 
-    Scaffold(topBar = { TopAppBar(title = { Text("Driving $address") }) }) { padding ->
+    val title = displayName ?: address
+    Scaffold(topBar = { TopAppBar(title = { Text("Driving $title") }) }) { padding ->
         Column(
             Modifier
                 .padding(padding)

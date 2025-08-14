@@ -14,6 +14,7 @@ import androidx.navigation.compose.rememberNavController
 import feature.discovery.DiscoveryScreen
 import feature.drive.DriveScreen
 import androidx.compose.ui.platform.LocalContext
+import android.net.Uri
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -41,9 +42,10 @@ fun AppNav(navController: NavHostController = rememberNavController()) {
                 onOpenDiagnostics = { navController.navigate("diagnostics") }
             )
         }
-        composable("drive/{address}") { backStackEntry ->
+        composable("drive/{address}?name={name}") { backStackEntry ->
             val address = backStackEntry.arguments?.getString("address") ?: ""
-            DriveScreen(address = address, onBack = { navController.popBackStack() }, bleClient = bleClient)
+            val name = backStackEntry.arguments?.getString("name")
+            DriveScreen(address = address, displayName = name, onBack = { navController.popBackStack() }, bleClient = bleClient)
         }
         composable("diagnostics") {
             DiagnosticsScreen(onBack = { navController.popBackStack() }, bleClient = bleClient)

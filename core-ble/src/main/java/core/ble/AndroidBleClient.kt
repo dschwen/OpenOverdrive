@@ -57,7 +57,7 @@ class AndroidBleClient(private val context: Context) : BleClient {
             override fun onScanResult(callbackType: Int, result: ScanResult) {
                 val dev = result.device ?: return
                 val key = dev.address ?: return
-                val entry = BleDevice(address = key, name = dev.name, rssi = result.rssi)
+                val entry = BleDevice(address = key, name = resolveName(result), rssi = result.rssi)
                 discoveredDevices[key] = entry
                 trySend(discoveredDevices.values.sortedBy { it.name ?: it.address }.toList())
             }
@@ -66,7 +66,7 @@ class AndroidBleClient(private val context: Context) : BleClient {
                 for (r in results) {
                     val dev = r.device ?: continue
                     val key = dev.address ?: continue
-                    val entry = BleDevice(address = key, name = dev.name, rssi = r.rssi)
+                    val entry = BleDevice(address = key, name = resolveName(r), rssi = r.rssi)
                     discoveredDevices[key] = entry
                     changed = true
                 }
@@ -82,6 +82,37 @@ class AndroidBleClient(private val context: Context) : BleClient {
             try { scanner?.stopScan(callback) } catch (_: Throwable) {}
             discoveredDevices.clear()
         }
+    }
+
+    private fun resolveName(result: ScanResult): String? {
+        val advertisedName = result.device?.name ?: result.scanRecord?.deviceName
+        if (!advertisedName.isNullOrBlank()) return advertisedName
+        // Fallback to model name from manufacturer data if present
+        val sr = result.scanRecord ?: return null
+        val msd = sr.manufacturerSpecificData ?: return null
+        for (i in 0 until msd.size()) {
+            val data = msd.valueAt(i) ?: continue
+            if (data.size >= 8) {
+                try {
+                    val bb = java.nio.ByteBuffer.wrap(data).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+                    bb.int // identifier
+                    val modelId = (bb.get().toInt() and 0xFF)
+                    // skip reserved
+                    bb.get()
+                    val model = when (modelId) {
+                        1 -> "Kourai"
+                        2 -> "Boson"
+                        3 -> "Rho"
+                        4 -> "Katal"
+                        8 -> "GroundShock"
+                        9 -> "Skull"
+                        else -> null
+                    }
+                    if (model != null) return model
+                } catch (_: Throwable) { /* ignore malformed records */ }
+            }
+        }
+        return null
     }
 
     @SuppressLint("MissingPermission")
