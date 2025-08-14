@@ -140,43 +140,77 @@ fun DriveScreen(
                 valueRange = 0f..1500f
             )
 
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                Button(onClick = {
+            // Controls grid: Accelerate, Left+Right, Decelerate, Brake
+            val green = androidx.compose.ui.graphics.Color(0xFF2E7D32)
+            val blue  = androidx.compose.ui.graphics.Color(0xFF1976D2)
+            val orange= androidx.compose.ui.graphics.Color(0xFFFB8C00)
+            val red   = androidx.compose.ui.graphics.Color(0xFFD32F2F)
+            val textOnColor = androidx.compose.ui.graphics.Color.White
+
+            // Accelerate (full width)
+            Button(
+                onClick = {
                     speed = (speed + 150).coerceAtMost(1500)
                     scope.launch { client.write(VehicleMsg.setSpeed(speed, 25000, 1)) }
-                }) { Text("Accelerate") }
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = green),
+                modifier = Modifier.fillMaxWidth().height(64.dp)
+            ) { Text("Accelerate", color = textOnColor) }
 
-                Button(onClick = {
+            // Left + Right (split row)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Button(
+                    onClick = {
+                        scope.launch {
+                            val fwd = if (speed < 300) 300 else speed
+                            client.write(VehicleMsg.setSpeed(fwd, 25000, 1))
+                            delay(100)
+                            client.write(VehicleMsg.setOffsetFromCenter(0f))
+                            delay(100)
+                            client.write(VehicleMsg.changeLane(600, 8000, -44f, hopIntent = 1, tag = laneTag.toByte()))
+                            laneTag = (laneTag + 1) and 0xFF
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = blue),
+                    modifier = Modifier.weight(1f).height(64.dp)
+                ) { Text("Left", color = textOnColor) }
+
+                Button(
+                    onClick = {
+                        scope.launch {
+                            val fwd = if (speed < 300) 300 else speed
+                            client.write(VehicleMsg.setSpeed(fwd, 25000, 1))
+                            delay(100)
+                            client.write(VehicleMsg.setOffsetFromCenter(0f))
+                            delay(100)
+                            client.write(VehicleMsg.changeLane(600, 8000, 44f, hopIntent = 1, tag = laneTag.toByte()))
+                            laneTag = (laneTag + 1) and 0xFF
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = blue),
+                    modifier = Modifier.weight(1f).height(64.dp)
+                ) { Text("Right", color = textOnColor) }
+            }
+
+            // Decelerate (full width)
+            Button(
+                onClick = {
+                    speed = (speed - 150).coerceAtLeast(0)
+                    scope.launch { client.write(VehicleMsg.setSpeed(speed, if (speed == 0) 30000 else 25000, 1)) }
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = orange),
+                modifier = Modifier.fillMaxWidth().height(64.dp)
+            ) { Text("Decelerate", color = textOnColor) }
+
+            // Brake (full width)
+            Button(
+                onClick = {
                     speed = 0
                     scope.launch { client.write(VehicleMsg.setSpeed(0, 30000, 1)) }
-                }) { Text("Brake") }
-            }
-
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                Button(onClick = {
-                    scope.launch {
-                        val fwd = if (speed < 300) 300 else speed
-                        client.write(VehicleMsg.setSpeed(fwd, 25000, 1))
-                        delay(100)
-                        client.write(VehicleMsg.setOffsetFromCenter(0f))
-                        delay(100)
-                        client.write(VehicleMsg.changeLane(600, 8000, -44f, hopIntent = 1, tag = laneTag.toByte()))
-                        laneTag = (laneTag + 1) and 0xFF
-                    }
-                }) { Text("Lane Left") }
-
-                Button(onClick = {
-                    scope.launch {
-                        val fwd = if (speed < 300) 300 else speed
-                        client.write(VehicleMsg.setSpeed(fwd, 25000, 1))
-                        delay(100)
-                        client.write(VehicleMsg.setOffsetFromCenter(0f))
-                        delay(100)
-                        client.write(VehicleMsg.changeLane(600, 8000, 44f, hopIntent = 1, tag = laneTag.toByte()))
-                        laneTag = (laneTag + 1) and 0xFF
-                    }
-                }) { Text("Lane Right") }
-            }
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = red),
+                modifier = Modifier.fillMaxWidth().height(72.dp)
+            ) { Text("Brake", color = textOnColor) }
 
             Spacer(Modifier.weight(1f))
 
@@ -185,11 +219,6 @@ fun DriveScreen(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                OutlinedButton(
-                    onClick = { scope.launch { client.write(VehicleMsg.batteryRequest()) } },
-                    modifier = Modifier.weight(1f).height(48.dp)
-                ) { Text("Read Battery", maxLines = 1) }
-
                 OutlinedButton(
                     onClick = {
                         startPieceId = lastPieceId
