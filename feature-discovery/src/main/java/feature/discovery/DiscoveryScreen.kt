@@ -3,11 +3,13 @@ package feature.discovery
 import android.Manifest
 import android.os.Build
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.border
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
@@ -20,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.res.stringResource
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.toArgb
 import android.graphics.Color as AndroidColor
@@ -31,6 +34,9 @@ import core.ble.BleDevice
 import data.CarRepository
 import data.CarProfile
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalPermissionsApi::class, ExperimentalMaterial3Api::class)
@@ -60,6 +66,7 @@ fun DiscoveryScreen(
 
     var items by remember { mutableStateOf<List<Pair<BleDevice, CarProfile?>>>(emptyList()) }
     var menuForAddress by remember { mutableStateOf<String?>(null) }
+    var connectingAddress by remember { mutableStateOf<String?>(null) }
     var colorPickerFor by remember { mutableStateOf<Pair<String, CarProfile?>?>(null) }
     var nameEditorFor by remember { mutableStateOf<Pair<String, CarProfile?>?>(null) }
     var confirmForgetFor by remember { mutableStateOf<String?>(null) }
@@ -103,18 +110,40 @@ fun DiscoveryScreen(
                     DeviceRow(
                         device = dev,
                         profile = profile,
+                        isConnecting = connectingAddress == dev.address,
                         menuExpanded = menuForAddress == dev.address,
                         onOpenMenu = { addr -> menuForAddress = addr },
                         onDismissMenu = { menuForAddress = null },
                         onConnect = {
+                            if (connectingAddress != null) return@DeviceRow
                             scope.launch {
                                 val updated = (profile ?: CarProfile(deviceAddress = dev.address)).copy(
                                     lastSeenName = dev.name,
                                     lastConnected = System.currentTimeMillis()
                                 )
                                 carRepo.upsertProfile(updated)
-                                client.connect(dev.address)
-                                onConnected(dev.address)
+                                connectingAddress = dev.address
+                                var success = false
+                                repeat(3) { attempt ->
+                                    // Ensure any previous session is closed
+                                    runCatching { client.disconnect() }
+                                    kotlinx.coroutines.delay(200)
+                                    client.connect(dev.address)
+                                    val ok = withTimeoutOrNull(8_000) {
+                                        client.connectionState
+                                            .filter { it is core.ble.ConnectionState.Connected && it.address == dev.address }
+                                            .first()
+                                        true
+                                    } ?: false
+                                    if (ok) { success = true; return@repeat }
+                                }
+                                if (success) {
+                                    connectingAddress = null
+                                    onConnected(dev.address)
+                                } else {
+                                    connectingAddress = null
+                                    snackbarHostState.showSnackbar("Connection failed")
+                                }
                             }
                         },
                         onPickColor = {
@@ -137,6 +166,9 @@ fun DiscoveryScreen(
             colorPickerFor?.let { (addr, prof) ->
                 ColorPickerDialog(
                     onDismiss = { colorPickerFor = null },
+                    initialSolid = prof?.colorArgb,
+                    initialStart = prof?.colorStartArgb,
+                    initialEnd = prof?.colorEndArgb,
                     onPick = { start, end ->
                         scope.launch {
                             val base = (prof ?: CarProfile(deviceAddress = addr))
@@ -189,6 +221,7 @@ fun DiscoveryScreen(
 private fun DeviceRow(
     device: BleDevice,
     profile: CarProfile?,
+    isConnecting: Boolean,
     menuExpanded: Boolean,
     onConnect: () -> Unit,
     onOpenMenu: (String) -> Unit,
@@ -223,8 +256,12 @@ private fun DeviceRow(
         },
         trailingContent = {
             Box {
-                IconButton(onClick = { onOpenMenu(device.address) }) {
-                    Icon(Icons.Filled.MoreVert, contentDescription = "More")
+                if (isConnecting) {
+                    CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                } else {
+                    IconButton(onClick = { onOpenMenu(device.address) }) {
+                        Icon(Icons.Filled.MoreVert, contentDescription = "More")
+                    }
                 }
                 DropdownMenu(expanded = menuExpanded, onDismissRequest = onDismissMenu) {
                     DropdownMenuItem(
@@ -296,21 +333,37 @@ private fun SolidBar(argb: Int) {
 }
 
 @Composable
-private fun ColorPickerDialog(onDismiss: () -> Unit, onPick: (Int, Int?) -> Unit) {
+private fun ColorPickerDialog(
+    onDismiss: () -> Unit,
+    initialSolid: Int?,
+    initialStart: Int?,
+    initialEnd: Int?,
+    onPick: (Int, Int?) -> Unit
+) {
     val colors = listOf(
         0xFFE53935.toInt(), 0xFF43A047.toInt(), 0xFF1E88E5.toInt(), 0xFFFDD835.toInt(),
         0xFFFB8C00.toInt(), 0xFF8E24AA.toInt(), 0xFF00BCD4.toInt(), 0xFF9E9E9E.toInt(),
         0xFFC0C0C0.toInt(), // Silver
         0xFFFFFFFF.toInt(), 0xFF000000.toInt()
     )
-    var gradientEnabled by remember { mutableStateOf(false) }
+    val defaultsA = 0xFF9E9E9E.toInt()
+    val initA = initialStart ?: initialSolid ?: defaultsA
+    val initB = initialEnd ?: 0xFF00BCD4.toInt()
+    var gradientEnabled by remember(initialStart, initialEnd) { mutableStateOf(initialEnd != null) }
     var activeStop by remember { mutableStateOf(0) } // 0 or 1
-    var hue0 by remember { mutableFloatStateOf(0f) }
-    var sat0 by remember { mutableFloatStateOf(1f) }
-    var val0 by remember { mutableFloatStateOf(1f) }
-    var hue1 by remember { mutableFloatStateOf(210f) }
-    var sat1 by remember { mutableFloatStateOf(1f) }
-    var val1 by remember { mutableFloatStateOf(1f) }
+    fun hsvFrom(argb: Int): Triple<Float, Float, Float> {
+        val hsv = FloatArray(3)
+        AndroidColor.colorToHSV(argb, hsv)
+        return Triple(hsv[0], hsv[1], hsv[2])
+    }
+    var (hue0Init, sat0Init, val0Init) = hsvFrom(initA)
+    var (hue1Init, sat1Init, val1Init) = hsvFrom(initB)
+    var hue0 by remember(initialStart, initialEnd) { mutableFloatStateOf(hue0Init) }
+    var sat0 by remember(initialStart, initialEnd) { mutableFloatStateOf(sat0Init) }
+    var val0 by remember(initialStart, initialEnd) { mutableFloatStateOf(val0Init) }
+    var hue1 by remember(initialStart, initialEnd) { mutableFloatStateOf(hue1Init) }
+    var sat1 by remember(initialStart, initialEnd) { mutableFloatStateOf(sat1Init) }
+    var val1 by remember(initialStart, initialEnd) { mutableFloatStateOf(val1Init) }
     val color0 by remember(hue0, sat0, val0) { mutableStateOf(Color.hsv(hue0.coerceIn(0f,360f), sat0.coerceIn(0f,1f), val0.coerceIn(0f,1f))) }
     val color1 by remember(hue1, sat1, val1) { mutableStateOf(Color.hsv(hue1.coerceIn(0f,360f), sat1.coerceIn(0f,1f), val1.coerceIn(0f,1f))) }
 
@@ -347,33 +400,50 @@ private fun ColorPickerDialog(onDismiss: () -> Unit, onPick: (Int, Int?) -> Unit
                 }
                 HorizontalDivider()
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("Gradient")
+                    Text(stringResource(id = R.string.ood_gradient))
                     Switch(checked = gradientEnabled, onCheckedChange = { gradientEnabled = it })
                     if (gradientEnabled) {
-                        AssistChip(label = { Text("Stop A") }, onClick = { activeStop = 0 }, leadingIcon = { Box(Modifier.size(16.dp).background(color0, shape = MaterialTheme.shapes.extraSmall)) })
-                        AssistChip(label = { Text("Stop B") }, onClick = { activeStop = 1 }, leadingIcon = { Box(Modifier.size(16.dp).background(color1, shape = MaterialTheme.shapes.extraSmall)) })
-                    }
-                    Spacer(Modifier.weight(1f))
-                    val previewBase = Modifier.size(48.dp)
-                    val previewMod = if (gradientEnabled) {
-                        previewBase.background(
-                            Brush.linearGradient(listOf(color0, color1)),
-                            shape = MaterialTheme.shapes.small
-                        )
+                        val ring = MaterialTheme.colorScheme.primary
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.weight(1f)) {
+                            Box(
+                                Modifier
+                                    .size(28.dp)
+                                    .background(color0, shape = CircleShape)
+                                    .border(2.dp, if (activeStop == 0) ring else androidx.compose.ui.graphics.Color.Transparent, CircleShape)
+                                    .clickable { activeStop = 0 }
+                            )
+                            Box(
+                                Modifier
+                                    .height(16.dp)
+                                    .weight(1f)
+                                    .background(Brush.linearGradient(listOf(color0, color1)), shape = MaterialTheme.shapes.extraSmall)
+                            )
+                            Box(
+                                Modifier
+                                    .size(28.dp)
+                                    .background(color1, shape = CircleShape)
+                                    .border(2.dp, if (activeStop == 1) ring else androidx.compose.ui.graphics.Color.Transparent, CircleShape)
+                                    .clickable { activeStop = 1 }
+                            )
+                        }
                     } else {
-                        previewBase.background(color0, shape = MaterialTheme.shapes.small)
+                        Spacer(Modifier.weight(1f))
                     }
+                    val previewBase = Modifier.size(48.dp)
+                    val previewMod = if (gradientEnabled) previewBase.background(
+                        Brush.linearGradient(listOf(color0, color1)), shape = MaterialTheme.shapes.small
+                    ) else previewBase.background(color0, shape = MaterialTheme.shapes.small)
                     Box(previewMod)
                 }
                 val (h, s, v) = if (activeStop == 0) Triple(hue0, sat0, val0) else Triple(hue1, sat1, val1)
-                Text("Hue")
+                Text(stringResource(id = R.string.ood_hue))
                 Slider(value = h, onValueChange = { if (activeStop == 0) hue0 = it else hue1 = it }, valueRange = 0f..360f)
-                Text("Saturation")
+                Text(stringResource(id = R.string.ood_saturation))
                 Slider(value = s, onValueChange = { if (activeStop == 0) sat0 = it else sat1 = it }, valueRange = 0f..1f)
-                Text("Value")
+                Text(stringResource(id = R.string.ood_value))
                 Slider(value = v, onValueChange = { if (activeStop == 0) val0 = it else val1 = it }, valueRange = 0f..1f)
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Button(onClick = { if (gradientEnabled) onPick(color0.toArgb(), color1.toArgb()) else onPick(color0.toArgb(), null) }) { Text("Use") }
+                    Button(onClick = { if (gradientEnabled) onPick(color0.toArgb(), color1.toArgb()) else onPick(color0.toArgb(), null) }) { Text(stringResource(id = R.string.ood_use)) }
                 }
             }
         },
