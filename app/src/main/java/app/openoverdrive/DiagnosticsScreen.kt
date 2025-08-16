@@ -1,4 +1,4 @@
-package app.openoverdrive
+package de.schwen.openoverdrive
 
 import android.Manifest
 import android.os.Build

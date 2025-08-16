@@ -2,7 +2,7 @@ Agent Notes
 
 - Build APK: run `./gradlew :app:assembleInternal`.
 - Output path: `app/build/outputs/apk/internal/app-internal.apk`.
-- Install via adb: `adb uninstall app.openoverdrive || true && adb install -r app/build/outputs/apk/internal/app-internal.apk`.
+- Install via adb: `adb uninstall de.schwen.openoverdrive || true && adb install -r app/build/outputs/apk/internal/app-internal.apk`.
 
 Environment
 

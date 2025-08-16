@@ -1,4 +1,4 @@
-package app.openoverdrive
+package de.schwen.openoverdrive
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -77,8 +77,8 @@ class DriveSessionService : Service() {
     companion object {
         private const val CHANNEL_ID = "open_overdrive_drive"
         private const val NOTIFICATION_ID = 1001
-        const val ACTION_START = "app.openoverdrive.action.START"
-        const val ACTION_DISCONNECT = "app.openoverdrive.action.DISCONNECT"
+        const val ACTION_START = "de.schwen.openoverdrive.action.START"
+        const val ACTION_DISCONNECT = "de.schwen.openoverdrive.action.DISCONNECT"
         const val EXTRA_LABEL = "label"
 
         fun start(context: Context, label: String) {

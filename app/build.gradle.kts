@@ -4,11 +4,11 @@ plugins {
 }
 
 android {
-    namespace = "app.openoverdrive"
+    namespace = "de.schwen.openoverdrive"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "app.openoverdrive"
+        applicationId = "de.schwen.openoverdrive"
         minSdk = 24
         targetSdk = 35
         versionCode = 1

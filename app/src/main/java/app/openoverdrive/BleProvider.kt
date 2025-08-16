@@ -1,4 +1,4 @@
-package app.openoverdrive
+package de.schwen.openoverdrive
 
 import android.content.Context
 import core.ble.AndroidBleClient
