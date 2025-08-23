@@ -52,7 +52,16 @@ fun AppNav(navController: NavHostController = rememberNavController()) {
             DiagnosticsScreen(onBack = { navController.popBackStack() }, bleClient = bleClient)
         }
         composable("multiplayer") {
-            MultiplayerScreen(onBack = { navController.popBackStack() })
+            MultiplayerScreen(
+                onBack = { navController.popBackStack() },
+                onStartDrive = { address, name ->
+                    if (!address.isNullOrBlank()) {
+                        val encoded = name?.let { java.net.URLEncoder.encode(it, "UTF-8") }
+                        val route = if (encoded != null) "drive/$address?name=$encoded" else "drive/$address"
+                        navController.navigate(route)
+                    }
+                }
+            )
         }
     }
 }

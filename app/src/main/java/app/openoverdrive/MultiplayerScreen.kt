@@ -15,10 +15,12 @@ import kotlinx.coroutines.launch
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
 import android.os.Build
+import data.CarRepository
+import kotlinx.coroutines.flow.first
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalPermissionsApi::class)
 @Composable
-fun MultiplayerScreen(onBack: () -> Unit) {
+fun MultiplayerScreen(onBack: () -> Unit, onStartDrive: (String?, String?) -> Unit = { _, _ -> }) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
 
@@ -41,6 +43,8 @@ fun MultiplayerScreen(onBack: () -> Unit) {
     var clientService by remember { mutableStateOf<ClientService?>(null) }
     val offsetByPeer = remember { mutableStateMapOf<String, Long>() }
     val sendTimes = remember { mutableStateMapOf<Int, Long>() }
+    val carRepo = remember { CarRepository(ctx, BleProvider.client) }
+    var didNavigateToDrive by remember { mutableStateOf(false) }
 
     // Incoming listener
     LaunchedEffect(transport) {
@@ -89,6 +93,8 @@ fun MultiplayerScreen(onBack: () -> Unit) {
                             val localGoAt = hostGoAt - est
                             core.net.NetSession.setMatchStartAt(localGoAt)
                             logs.add("<- Start Match: ${countdownSec}s, localGoAt=${localGoAt}")
+                            // Navigate to Drive screen if a last-connected car exists
+                navigateToDriveIfAvailable(scope = scope, carRepo = carRepo, logs = logs, getDidNavigate = { didNavigateToDrive }, setDidNavigate = { didNavigateToDrive = it }, onStartDrive = onStartDrive)
                         } else if (msg.type == 2) {
                             // Cancel countdown
                             core.net.NetSession.setMatchStartAt(null)
@@ -255,24 +261,11 @@ fun MultiplayerScreen(onBack: () -> Unit) {
                     Text("• ${p.name ?: p.id}${off?.let { "  (offset≈${it}ms)" } ?: ""}")
                 }
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                val t = transport
-                Button(onClick = {
-                    val bytes = NetCodec.encode(NetMessage.Ping((0..1_000_000).random()))
-                    scope.launch {
-                        val count = t?.broadcast(bytes) ?: 0
-                        logs.add("-> broadcast Ping to $count peers")
-                    }
-                }, enabled = running) { Text("Broadcast Ping") }
-                Button(onClick = {
-                    val bytes = NetCodec.encode(NetMessage.Join(name, appVersion = 1))
-                    scope.launch {
-                        val count = t?.broadcast(bytes) ?: 0
-                        logs.add("-> broadcast Join to $count peers")
-                    }
-                }, enabled = running) { Text("Broadcast Join") }
-                if (isHost) {
-                    Button(onClick = {
+            // Host controls (prominent)
+            if (isHost) {
+                val green = androidx.compose.ui.graphics.Color(0xFF2E7D32)
+                Button(
+                    onClick = {
                         val countdownSec = 3
                         val hostGoAt = System.currentTimeMillis() + (countdownSec + 1) * 1000L
                         // payload: [hostGoAt(int64 LE), countdownSec(u8)]
@@ -284,24 +277,44 @@ fun MultiplayerScreen(onBack: () -> Unit) {
                             val count = transport?.broadcast(evt) ?: 0
                             logs.add("-> Start Match sent to $count peers")
                             core.net.NetSession.setMatchStartAt(hostGoAt)
+                            navigateToDriveIfAvailable(scope = scope, carRepo = carRepo, logs = logs, getDidNavigate = { didNavigateToDrive }, setDidNavigate = { didNavigateToDrive = it }, onStartDrive = onStartDrive)
                         }
-                    }, enabled = running && !preGo) { Text("Start Match") }
+                    },
+                    enabled = running && !preGo,
+                    colors = ButtonDefaults.buttonColors(containerColor = green),
+                    modifier = Modifier.fillMaxWidth().height(64.dp)
+                ) { Text("Start Match", color = androidx.compose.ui.graphics.Color.White) }
 
-                    // Allow host to cancel/reset the countdown while it's active
-                    Button(onClick = {
-                        // Event type 2 = Cancel Match Countdown
+                Button(
+                    onClick = {
                         val evt = NetCodec.encode(NetMessage.Event(type = 2, payload = ByteArray(0)))
                         scope.launch {
                             val count = transport?.broadcast(evt) ?: 0
                             logs.add("-> Cancel Countdown sent to $count peers")
                             core.net.NetSession.setMatchStartAt(null)
                         }
-                    }, enabled = running && preGo) { Text("Cancel Countdown") }
-                }
+                    },
+                    enabled = running && preGo,
+                    modifier = Modifier.fillMaxWidth().height(48.dp)
+                ) { Text("Cancel Countdown") }
             }
             LazyColumn(Modifier.fillMaxWidth().weight(1f)) {
                 items(logs) { line -> Text(line) }
             }
+        }
+    }
+}
+
+private fun navigateToDriveIfAvailable(scope: kotlinx.coroutines.CoroutineScope, carRepo: data.CarRepository, logs: MutableList<String>, getDidNavigate: () -> Boolean, setDidNavigate: (Boolean) -> Unit, onStartDrive: (String?, String?) -> Unit) {
+    if (getDidNavigate()) return
+    scope.launch {
+        val profiles = runCatching { carRepo.profilesFlow.first() }.getOrDefault(emptyList())
+        val last = profiles.maxByOrNull { it.lastConnected ?: 0L }
+        if (last != null) {
+            setDidNavigate(true)
+            onStartDrive(last.deviceAddress, last.displayName ?: last.lastSeenName)
+        } else {
+            logs.add("(no last-connected car to drive)")
         }
     }
 }
