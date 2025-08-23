@@ -61,6 +61,7 @@ dependencies {
     implementation(project(":data"))
     implementation(project(":feature-discovery"))
     implementation(project(":feature-drive"))
+    implementation(project(":core-net"))
 
     implementation(platform("androidx.compose:compose-bom:2024.09.01"))
     implementation("androidx.compose.ui:ui")
