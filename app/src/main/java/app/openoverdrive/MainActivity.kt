@@ -12,7 +12,6 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import feature.discovery.DiscoveryScreen
-import feature.drive.DriveScreen
 import androidx.compose.ui.platform.LocalContext
 import android.net.Uri
 
@@ -44,10 +43,17 @@ fun AppNav(navController: NavHostController = rememberNavController()) {
                 onOpenMultiplayer = { navController.navigate("multiplayer") }
             )
         }
-        composable("drive/{address}?name={name}") { backStackEntry ->
+        // Single-player drive
+        composable("drive_sp/{address}?name={name}") { backStackEntry ->
             val address = backStackEntry.arguments?.getString("address") ?: ""
             val name = backStackEntry.arguments?.getString("name")
-            DriveScreen(address = address, displayName = name, onBack = { navController.popBackStack() }, bleClient = bleClient)
+            feature.drive.SinglePlayerDriveScreen(address = address, displayName = name, onBack = { navController.popBackStack() }, bleClient = bleClient)
+        }
+        // Multiplayer drive
+        composable("drive_mp/{address}?name={name}") { backStackEntry ->
+            val address = backStackEntry.arguments?.getString("address") ?: ""
+            val name = backStackEntry.arguments?.getString("name")
+            feature.drive.MultiPlayerDriveScreen(address = address, displayName = name, onBack = { navController.popBackStack() }, bleClient = bleClient)
         }
         composable("diagnostics") {
             DiagnosticsScreen(onBack = { navController.popBackStack() }, bleClient = bleClient)
@@ -60,12 +66,13 @@ fun AppNav(navController: NavHostController = rememberNavController()) {
                 selectedAddress = address,
                 selectedName = name,
                 onBack = { navController.popBackStack() },
-                onStartDrive = { addr, nm ->
+                onStartDrive = { addr, nm, isMultiplayer ->
                     val a = addr ?: address
                     val n = nm ?: name
                     if (!a.isNullOrBlank()) {
                         val encoded = n?.let { java.net.URLEncoder.encode(it, "UTF-8") }
-                        val route = if (encoded != null) "drive/$a?name=$encoded" else "drive/$a"
+                        val base = if (isMultiplayer) "drive_mp" else "drive_sp"
+                        val route = if (encoded != null) "$base/$a?name=$encoded" else "$base/$a"
                         navController.navigate(route)
                     }
                 }

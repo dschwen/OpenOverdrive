@@ -31,7 +31,7 @@ import core.net.NetMessage
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DriveScreen(
+fun MultiPlayerDriveScreen(
     address: String,
     displayName: String? = null,
     onBack: () -> Unit,
@@ -428,17 +428,6 @@ fun DriveScreen(
             ) {
                 OutlinedButton(
                     onClick = {
-                        startPieceId = lastPieceId
-                        wasOnMarker = true // require leaving and re-entering to count
-                        laps = 0
-                        lastLapTs = 0L
-                        lastLapTimeMs = null
-                    },
-                    modifier = Modifier.weight(1f).height(48.dp)
-                ) { Text(if (startPieceId == null) "Mark Start" else "Reset Laps", maxLines = 1) }
-
-                OutlinedButton(
-                    onClick = {
                         scope.launch {
                             runCatching { client.write(VehicleMsg.setSpeed(0, 30000, 1)) }
                             delay(150)
@@ -451,8 +440,8 @@ fun DriveScreen(
                             onBack()
                         }
                     },
-                    modifier = Modifier.weight(1f).height(48.dp)
-                ) { Text("Disconnect", maxLines = 1) }
+                    modifier = Modifier.fillMaxWidth().height(48.dp)
+                ) { Text("Quit Match", maxLines = 1) }
             }
         }
     }

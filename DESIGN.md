@@ -77,12 +77,52 @@ UI/UX (feature modules)
   - Request runtime permissions; show explanatory rationale.
   - List visible cars; show known cars with color chips (future); connect action.
   - Allow color selection and forget from list item menu (future).
-- Drive:
+- Drive (Single‑Player):
   - Speed slider; accelerate/brake buttons; lane left/right buttons.
   - Indicators: Battery, current speed, lap count and last lap time.
   - Read Battery button for manual refresh (auto polling planned).
   - Disconnect/back button; session foreground notification (future).
   - Lights: apply profile color to engine RGB on connect; quick toggles for Front/Tail in Diagnostics.
+
+Single vs Multiplayer Drive — UX Split
+
+Motivation
+- The Drive surface now serves two different jobs: casual solo driving and synchronized multiplayer races. Their UX differs enough to warrant two dedicated screens to reduce conditionals and confusion.
+
+Navigation Flow
+- Discover → Pick car → Car Lobby (name input + actions)
+  - Single Player → SinglePlayerDriveScreen(address, name)
+  - Host Game → start Nearby host → Start Match → MultiPlayerDriveScreen(address, name)
+  - Join Game → start Nearby client → wait for Host Start → MultiPlayerDriveScreen(address, name)
+
+SinglePlayerDriveScreen
+- BLE: owns connect/handshake (auto‑connect on enter), writes and parses locally.
+- Controls: full set (speed slider; Accelerate/Decelerate; Left/Right; Brake).
+- Laps: manual “Mark Start/Reset” button; lap timing uses on‑device heuristics; no countdown lock.
+- Session: “Disconnect” stops BLE and returns; no network state.
+
+MultiPlayerDriveScreen
+- BLE: same local BLE control as single‑player; additionally publishes telemetry (position/speed) best‑effort to host.
+- Countdown & lock: controls are disabled during lobby‑coordinated countdown; enable exactly at “Go!”.
+- Start marker: automatically captured at or immediately after “Go!” when the first piece is crossed (no Mark Start button).
+- Match config: receives target laps from Host Start event; shows lap progress.
+- Results: after finishing required laps, show ranking (place), total time, and best lap; keep updating as peers finish.
+- Session: “Quit Match” stops BLE (safely), clears match state (start time, target laps), stops Nearby transport, and returns to lobby.
+
+Rationale & Implementation Notes
+- Separate composables (SinglePlayerDriveScreen vs MultiPlayerDriveScreen) reduce branching, make state ownership clearer (e.g., countdown, target laps, results), and simplify future features (e.g., items, penalties) without sprinkling multiplayer guards across single‑player.
+- Common controls should live in a shared sub‑composable (DriveControls) parametrized by “enabled” and callbacks to send commands; both screens can consume it.
+- NetSession provides shared flows for transport and match metadata (matchStartAtMs, targetLaps). Multiplayer screen owns listening to lap/finish events and building a lightweight “racers” map for results.
+- Messages (current):
+  - Event 1 StartMatch: payload [hostGoAt i64, countdownSec u8, targetLaps u8]
+  - Event 2 CancelMatch
+  - Event 3 LapUpdate: [laps u8, lastLapMs i64, elapsedMs i64]
+  - Event 4 Finish: [laps u8, elapsedMs i64]
+- Host may optionally echo results as a final summary event for clients that finish late or disconnect/reconnect.
+
+Visual Differences Summary
+- Single‑player: shows “Mark Start/Reset” and “Disconnect”.
+- Multiplayer: hides Mark Start; changes “Disconnect” to “Quit Match”; shows target laps and a results list when finished.
 
 Lap timing improvements
 - Parse position (0x27) and transition (0x29) updates. Use parsing flags to detect reverse driving.
@@ -115,6 +155,9 @@ Roadmap
 6) Expand localization parsing (flags, wheel distances) and add Car Status (charging) indicator.
 7) Add Diagnostics panels for raw telemetry, version/status, and test commands.
 8) Multiplayer: host-authoritative P2P over local transports (see Multiplayer Plan).
+   - Split drive surfaces: implement SinglePlayerDriveScreen and MultiPlayerDriveScreen.
+   - Extract shared controls to a DriveControls composable and gate enablement by countdown state.
+   - Persist per‑match results for quick sharing and post‑race review.
 
 Long‑Term Plan: Profiles, Telemetry, and Gameplay
 

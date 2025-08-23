@@ -23,7 +23,7 @@ fun MultiplayerScreen(
     selectedAddress: String?,
     selectedName: String?,
     onBack: () -> Unit,
-    onStartDrive: (String?, String?) -> Unit = { _, _ -> }
+    onStartDrive: (String?, String?, Boolean) -> Unit = { _, _, _ -> }
 ) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -99,7 +99,7 @@ fun MultiplayerScreen(
                             core.net.NetSession.setMatchStartAt(localGoAt)
                             core.net.NetSession.setTargetLaps(targetLaps)
                             logs.add("<- Start Match: ${countdownSec}s, localGoAt=${localGoAt}")
-                            if (!didNavigateToDrive) { didNavigateToDrive = true; onStartDrive(selectedAddress, selectedName) }
+                            if (!didNavigateToDrive) { didNavigateToDrive = true; onStartDrive(selectedAddress, selectedName, true) }
                         } else if (msg.type == 2) {
                             // Cancel countdown
                             core.net.NetSession.setMatchStartAt(null)
@@ -260,7 +260,7 @@ fun MultiplayerScreen(
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Button(onClick = { onStartDrive(selectedAddress, selectedName) }, enabled = selectedAddress != null) { Text("Single Player") }
+                Button(onClick = { onStartDrive(selectedAddress, selectedName, false) }, enabled = selectedAddress != null) { Text("Single Player") }
                 OutlinedButton(onClick = onBack) { Text("Back") }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -295,7 +295,7 @@ fun MultiplayerScreen(
                             logs.add("-> Start Match sent to $count peers")
                             core.net.NetSession.setMatchStartAt(hostGoAt)
                             core.net.NetSession.setTargetLaps(laps)
-                            if (!didNavigateToDrive) { didNavigateToDrive = true; onStartDrive(selectedAddress, selectedName) }
+                            if (!didNavigateToDrive) { didNavigateToDrive = true; onStartDrive(selectedAddress, selectedName, true) }
                         }
                     },
                     enabled = running && !preGo,
