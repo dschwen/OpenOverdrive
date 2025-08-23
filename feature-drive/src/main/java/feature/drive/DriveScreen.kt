@@ -61,6 +61,7 @@ fun MultiPlayerDriveScreen(
     // Race/match state
     var nowMs by remember { mutableStateOf(System.currentTimeMillis()) }
     var wasOnMarker by remember { mutableStateOf(false) }
+    var useV4Speed by remember { mutableStateOf(true) }
     var autoMarkPending by remember { mutableStateOf(false) }
     var finishedAtMs by remember { mutableStateOf<Long?>(null) }
     data class Racer(var name: String?, var laps: Int = 0, var bestLapMs: Long? = null, var finishedAt: Long? = null)
@@ -164,6 +165,7 @@ fun MultiPlayerDriveScreen(
                         lastPieceId = rp
                     }
                 }
+                is VehicleMessage.Version -> { useV4Speed = (msg.version >= 12385) }
                 else -> {}
             }
         }
@@ -293,7 +295,8 @@ fun MultiPlayerDriveScreen(
                 onValueChangeFinished = {
                     scope.launch {
                         val target = if (!controlsEnabled) 0 else speed
-                        client.write(VehicleMsg.setSpeed(target, 25000, 1))
+                        val pkt = if (useV4Speed) VehicleMsg.setSpeedV4(target, 25000, 1) else VehicleMsg.setSpeed(target, 25000, 1)
+                        client.write(pkt)
                     }
                 },
                 valueRange = 0f..1500f,
@@ -312,7 +315,10 @@ fun MultiPlayerDriveScreen(
                 onClick = {
                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                     speed = (speed + 150).coerceAtMost(1500)
-                    scope.launch { client.write(VehicleMsg.setSpeed(speed, 25000, 1)) }
+                    scope.launch {
+                        val pkt = if (useV4Speed) VehicleMsg.setSpeedV4(speed, 25000, 1) else VehicleMsg.setSpeed(speed, 25000, 1)
+                        client.write(pkt)
+                    }
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = green),
                 modifier = Modifier.fillMaxWidth().height(64.dp),
@@ -326,7 +332,12 @@ fun MultiPlayerDriveScreen(
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         scope.launch {
                             val fwd = if (speed < 300) 300 else speed
-                            if (!controlsEnabled) client.write(VehicleMsg.setSpeed(0, 25000, 1)) else client.write(VehicleMsg.setSpeed(fwd, 25000, 1))
+                            val pkt = if (!controlsEnabled) {
+                                if (useV4Speed) VehicleMsg.setSpeedV4(0, 25000, 1) else VehicleMsg.setSpeed(0, 25000, 1)
+                            } else {
+                                if (useV4Speed) VehicleMsg.setSpeedV4(fwd, 25000, 1) else VehicleMsg.setSpeed(fwd, 25000, 1)
+                            }
+                            client.write(pkt)
                             delay(100)
                             client.write(VehicleMsg.setOffsetFromCenter(0f))
                             delay(100)
@@ -344,7 +355,12 @@ fun MultiPlayerDriveScreen(
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         scope.launch {
                             val fwd = if (speed < 300) 300 else speed
-                            if (!controlsEnabled) client.write(VehicleMsg.setSpeed(0, 25000, 1)) else client.write(VehicleMsg.setSpeed(fwd, 25000, 1))
+                            val pkt = if (!controlsEnabled) {
+                                if (useV4Speed) VehicleMsg.setSpeedV4(0, 25000, 1) else VehicleMsg.setSpeed(0, 25000, 1)
+                            } else {
+                                if (useV4Speed) VehicleMsg.setSpeedV4(fwd, 25000, 1) else VehicleMsg.setSpeed(fwd, 25000, 1)
+                            }
+                            client.write(pkt)
                             delay(100)
                             client.write(VehicleMsg.setOffsetFromCenter(0f))
                             delay(100)
@@ -363,7 +379,11 @@ fun MultiPlayerDriveScreen(
                 onClick = {
                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                     speed = (speed - 150).coerceAtLeast(0)
-                    scope.launch { client.write(VehicleMsg.setSpeed(speed, if (speed == 0) 30000 else 25000, 1)) }
+                    scope.launch {
+                        val accel = if (speed == 0) 30000 else 25000
+                        val pkt = if (useV4Speed) VehicleMsg.setSpeedV4(speed, accel, 1) else VehicleMsg.setSpeed(speed, accel, 1)
+                        client.write(pkt)
+                    }
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = orange),
                 modifier = Modifier.fillMaxWidth().height(64.dp),
@@ -380,7 +400,10 @@ fun MultiPlayerDriveScreen(
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                     }
                     speed = 0
-                    scope.launch { client.write(VehicleMsg.setSpeed(0, 30000, 1)) }
+                    scope.launch {
+                        val pkt = if (useV4Speed) VehicleMsg.setSpeedV4(0, 30000, 1) else VehicleMsg.setSpeed(0, 30000, 1)
+                        client.write(pkt)
+                    }
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = red),
                 modifier = Modifier.fillMaxWidth().height(72.dp),

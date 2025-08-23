@@ -67,6 +67,18 @@ object VehicleMsg {
         return bb.array()
     }
 
+    /** V4-compatible Set Speed packet: adds a trailing byte (value 0x01). */
+    fun setSpeedV4(speedMmPerSec: Int, accelMmPerSec2: Int, respectLimit: Byte = 0): ByteArray {
+        val bb = bb(1 + 1 + 6)
+        bb.put(7) // payload size including id (0x24) + 6 bytes
+        bb.put(MsgId.C2V_SET_SPEED)
+        bb.putShort(speedMmPerSec.toShort())
+        bb.putShort(accelMmPerSec2.toShort())
+        bb.put(respectLimit)
+        bb.put(0x01)
+        return bb.array()
+    }
+
     fun setOffsetFromCenter(offsetMm: Float): ByteArray {
         val bb = bb(1 + 1 + 4)
         bb.put(5)
