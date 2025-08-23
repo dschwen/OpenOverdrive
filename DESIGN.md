@@ -113,6 +113,8 @@ Roadmap
 4) Add color association + persistence UI; enhance Discovery list.
 5) Add foreground service for driving; quick actions in notification.
 6) Expand localization parsing (flags, wheel distances) and add Car Status (charging) indicator.
+7) Add Diagnostics panels for raw telemetry, version/status, and test commands.
+8) Multiplayer: host-authoritative P2P over local transports (see Multiplayer Plan).
 
 Long‑Term Plan: Profiles, Telemetry, and Gameplay
 
@@ -147,8 +149,63 @@ Long‑Term Plan: Profiles, Telemetry, and Gameplay
   - Spectator/Replay: record positions and events to replay or share.
 
 - Networking & Multi‑Device
-  - Optional host device runs the world model; peers connect over local network/WebRTC for inputs and views.
-  - Deterministic tick rate (e.g., 20–50 Hz) for consistent simulation; BLE inputs feed into the next tick.
+  - Topology: designate one phone as the host authority; peers join over a local, serverless transport.
+  - Transports (no internet server):
+    - Nearby Connections API (preferred): offline, high-throughput, star topology host⇄peers.
+    - Wi‑Fi LAN sockets: mDNS/NSD discovery on same network; TCP for control, UDP for state.
+    - Wi‑Fi Direct (P2P): host forms group; sockets over the P2P link; more setup friction.
+  - Deterministic tick rate (e.g., 20–30 Hz) for consistent simulation; inputs feed into next tick; clients interpolate.
+  - Time sync: host sends periodic time sync; clients estimate RTT and maintain clock offset.
+  - Messages: join/leave, timeSync, input, carTelemetry (piece/offset/speed), worldState, events (laps, hits), chat/ping.
+  - Authority: host resolves collisions, items, lap counts; clients control their own car via BLE but follow host directives (target speed, effects); host can clamp or override to enforce fairness.
+
+Multiplayer Plan
+- Goals: multiple phones each controlling one car locally over BLE; shared, consistent game state without an external server.
+- Architecture: host‑authoritative star topology.
+  - One device (Host) runs the world simulation at a fixed tick (20–30 Hz) and is the single source of truth for gameplay.
+  - Each Client connects to its car over BLE and to the Host over a local transport; sends inputs and car telemetry; applies Host directives.
+- Transport options (serverless):
+  - Nearby Connections API (Strategy.P2P_STAR):
+    - Pros: works offline, abstracts Bluetooth/Wi‑Fi, simple discovery/permissions.
+    - Cons: Android‑only API, opaque link characteristics.
+  - Wi‑Fi LAN + NSD/mDNS:
+    - Pros: standard sockets, easier cross‑platform.
+    - Cons: requires same network or hotspot; discovery varies by OEM.
+  - Wi‑Fi Direct (P2P):
+    - Pros: no AP required; direct peer group.
+    - Cons: setup UX, permissions, and stability vary.
+- Recommendation: start with Nearby Connections for a smooth offline experience; add LAN sockets as a fallback option.
+- Time and latency:
+  - Host issues time sync frames every ~1s; clients maintain an offset (NTP‑style) and smooth drift.
+  - Budget: aim for end‑to‑end < 80 ms (input→host→peers) on local links; state tick 20–30 Hz; client interpolates/extrapolates up to 100 ms.
+- Message schema and versioning:
+  - Use a compact binary (e.g., CBOR or protobuf). Include a protocol version and per‑message type IDs.
+  - Core messages:
+    - Join: client info {name, carId?, appVersion}; server assigns peerId.
+    - TimeSync: {tHost, seq}; client replies with {tClient, seq} to compute RTT.
+    - Input: {peerId, throttle, laneChange, fire, tsClient}.
+    - CarTelemetry: {peerId, pieceId, locationId, offsetMm, speedMmps, flags, tsClient}.
+    - WorldState: {tick, perCar states, items, lap counters} (delta‑compressed; full snapshot on interval).
+    - Event: {type, payload} (lap, collision, powerup, hit).
+    - Chat/Ping: optional.
+- Host/Client responsibilities:
+  - Host: merges inputs + telemetry, advances world, resolves collisions/powerups, broadcasts WorldState and Events.
+  - Client: applies Host’s target directives (e.g., max speed, slowdowns), still performs BLE control for its car; sends inputs and telemetry.
+- Failure handling:
+  - Reconnect on link drop; simple host re‑election (manual selection) if host leaves; resume from last full snapshot.
+  - Guard against out‑of‑order/delayed packets with tick/sequence numbers; drop stale frames.
+- Security/Trust: local sessions are trusted; minimal anti‑cheat (host clamps inputs, validates telemetry consistency).
+- UX:
+  - Lobby: Host creates/join code or visible Nearby session; Clients tap to join; show connected peers.
+  - HUD: per‑car status, lap counts, simple chat/ready; host starts the match.
+
+Implementation Steps (Multiplayer)
+1) Add `core-net` module with transport abstraction and two impls: Nearby and LAN sockets.
+2) Define message schema + versioning; implement encoder/decoder and tests.
+3) Implement HostService: tick loop, world reducer, broadcaster; ClientService: input/telemetry sender, state applier.
+4) Add Lobby UI (host/join), peer list, session lifecycle.
+5) Integrate with Drive: client reads car telemetry (0x27/0x29) → sends to host; applies host target directives in control loop.
+6) Field test with 2–3 phones on hotspot and home Wi‑Fi; measure RTT, loss, and smoothing.
 
 Feasibility: Can we infer piece shape from current data?
 

@@ -27,4 +27,4 @@ include(":core-protocol")
 include(":data")
 include(":feature-discovery")
 include(":feature-drive")
-
+include(":core-net")
