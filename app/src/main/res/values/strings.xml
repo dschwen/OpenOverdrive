@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ood_mp_lobby_title">Multiplayer Lobby</string>
+    <string name="ood_mp_bt_perms_required">Bluetooth permissions required for multiplayer</string>
+    <string name="ood_grant_permissions">Grant Permissions</string>
+    <string name="ood_your_name">Your name</string>
+    <string name="ood_laps_label">Laps:</string>
+    <string name="ood_nearby_label">Nearby:</string>
+    <string name="ood_start_in_label">Start in:</string>
+    <string name="ood_match_started">Match started</string>
+    <string name="ood_single_player">Single Player</string>
+    <string name="ood_back">Back</string>
+    <string name="ood_host_game">Host Game</string>
+    <string name="ood_join_game">Join Game</string>
+    <string name="ood_leave">Leave</string>
+    <string name="ood_peers_label">Peers</string>
+    <string name="ood_start_match">Start Match</string>
+    <string name="ood_cancel_countdown">Cancel Countdown</string>
+</resources>

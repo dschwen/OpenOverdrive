@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ood_driving_title">驾驶 %1$s</string>
+    <string name="ood_battery_label">电量：</string>
+    <string name="ood_accelerate">加速</string>
+    <string name="ood_left">左</string>
+    <string name="ood_right">右</string>
+    <string name="ood_brake">刹车</string>
+    <string name="ood_mark_start">标记起点</string>
+    <string name="ood_reset_laps">重置圈数</string>
+    <string name="ood_disconnect">断开连接</string>
+    <string name="ood_quit_match">退出比赛</string>
+    <string name="ood_match_started">比赛开始</string>
+</resources>

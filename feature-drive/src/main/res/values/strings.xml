@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ood_driving_title">Driving %1$s</string>
+    <string name="ood_battery_label">Battery:</string>
+    <string name="ood_accelerate">Accelerate</string>
+    <string name="ood_left">Left</string>
+    <string name="ood_right">Right</string>
+    <string name="ood_brake">Brake</string>
+    <string name="ood_mark_start">Mark Start</string>
+    <string name="ood_reset_laps">Reset Laps</string>
+    <string name="ood_disconnect">Disconnect</string>
+    <string name="ood_quit_match">Quit Match</string>
+    <string name="ood_match_started">Match started</string>
+</resources>

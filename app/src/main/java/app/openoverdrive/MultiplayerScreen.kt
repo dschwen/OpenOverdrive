@@ -10,6 +10,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
 import core.net.*
 import kotlinx.coroutines.launch
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
@@ -214,7 +215,7 @@ fun MultiplayerScreen(
     val preGo = matchStartAt?.let { nowMs < it } ?: false
     val postGoShowing = matchStartAt?.let { nowMs in it..(it + 1500) } ?: false
 
-    Scaffold(topBar = { TopAppBar(title = { Text("Multiplayer Lobby") }) }) { padding ->
+    Scaffold(topBar = { TopAppBar(title = { Text(stringResource(id = R.string.ood_mp_lobby_title)) }) }) { padding ->
         Column(Modifier.padding(padding).padding(16.dp).fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             // Runtime permissions for Nearby (Android 12+): request BLE advertise/scan/connect
             val permissions = if (Build.VERSION.SDK_INT >= 31) {
@@ -237,9 +238,9 @@ fun MultiplayerScreen(
             if (!permissions.allPermissionsGranted) {
                 ElevatedCard(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(12.dp)) {
-                        Text("Bluetooth permissions required for multiplayer")
+                        Text(stringResource(id = R.string.ood_mp_bt_perms_required))
                         Spacer(Modifier.height(8.dp))
-                        Button(onClick = { permissions.launchMultiplePermissionRequest() }) { Text("Grant Permissions") }
+                        Button(onClick = { permissions.launchMultiplePermissionRequest() }) { Text(stringResource(id = R.string.ood_grant_permissions)) }
                     }
                 }
             }
@@ -250,7 +251,7 @@ fun MultiplayerScreen(
                     name = it
                     prefs.edit().putString("player_name", it).apply()
                 },
-                label = { Text("Your name") },
+                label = { Text(stringResource(id = R.string.ood_your_name)) },
                 modifier = Modifier.fillMaxWidth()
             )
             // Connected vehicle name (below the input)
@@ -261,7 +262,7 @@ fun MultiplayerScreen(
             )
             // Laps selector (host can change; value is sent with Start Match)
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Laps:")
+                Text(stringResource(id = R.string.ood_laps_label))
                 listOf(1,3,5,10).forEach { n ->
                     val sel = n == laps
                     if (sel) Button(onClick = { laps = n }) { Text("$n") } else OutlinedButton(onClick = { laps = n }) { Text("$n") }
@@ -272,7 +273,7 @@ fun MultiplayerScreen(
             val nearbyStatus by remember(transport) {
                 (transport as? NearbyTransport)?.status ?: kotlinx.coroutines.flow.MutableStateFlow("Idle")
             }.collectAsState(initial = "Idle")
-            Text("Nearby: $nearbyStatus")
+            Text(stringResource(id = R.string.ood_nearby_label) + " " + nearbyStatus)
             if (isHost == false) {
                 Text("Time offset (≈): ${offsetEstimateMs?.let { "$it ms" } ?: "?"}")
             }
@@ -286,23 +287,23 @@ fun MultiplayerScreen(
                     remaining > -200 -> "Go!"
                     else -> null
                 }
-                label?.let { Text("Start in: $it", style = MaterialTheme.typography.titleMedium) }
+                label?.let { Text(stringResource(id = R.string.ood_start_in_label) + " " + it, style = MaterialTheme.typography.titleMedium) }
                 if (postGoShowing) {
-                    Text("Match started", style = MaterialTheme.typography.titleMedium)
+                    Text(stringResource(id = R.string.ood_match_started), style = MaterialTheme.typography.titleMedium)
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Button(onClick = { leavingToDrive = true; onStartDrive(selectedAddress, selectedName, false) }, enabled = selectedAddress != null) { Text("Single Player") }
-                OutlinedButton(onClick = { handleBack() }) { Text("Back") }
+                Button(onClick = { leavingToDrive = true; onStartDrive(selectedAddress, selectedName, false) }, enabled = selectedAddress != null) { Text(stringResource(id = R.string.ood_single_player)) }
+                OutlinedButton(onClick = { handleBack() }) { Text(stringResource(id = R.string.ood_back)) }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 val canStart = permissions.allPermissionsGranted
-                Button(onClick = { isHost = true; startNearby(ctx) }, enabled = !running && canStart) { Text("Host Game") }
-                Button(onClick = { isHost = false; startNearby(ctx) }, enabled = !running && canStart) { Text("Join Game") }
-                if (running) OutlinedButton(onClick = { stopNearby() }) { Text("Leave") }
+                Button(onClick = { isHost = true; startNearby(ctx) }, enabled = !running && canStart) { Text(stringResource(id = R.string.ood_host_game)) }
+                Button(onClick = { isHost = false; startNearby(ctx) }, enabled = !running && canStart) { Text(stringResource(id = R.string.ood_join_game)) }
+                if (running) OutlinedButton(onClick = { stopNearby() }) { Text(stringResource(id = R.string.ood_leave)) }
             }
             HorizontalDivider()
-            Text("Peers (${peers.size})")
+            Text(stringResource(id = R.string.ood_peers_label) + " (" + peers.size + ")")
             LazyColumn(Modifier.fillMaxWidth().heightIn(max = 180.dp)) {
                 items(peers) { p ->
                     val off = offsetByPeer[p.id]
@@ -333,7 +334,7 @@ fun MultiplayerScreen(
                     enabled = running && !preGo,
                     colors = ButtonDefaults.buttonColors(containerColor = green),
                     modifier = Modifier.fillMaxWidth().height(64.dp)
-                ) { Text("Start Match", color = androidx.compose.ui.graphics.Color.White) }
+                ) { Text(stringResource(id = R.string.ood_start_match), color = androidx.compose.ui.graphics.Color.White) }
 
                 Button(
                     onClick = {
@@ -346,7 +347,7 @@ fun MultiplayerScreen(
                     },
                     enabled = running && preGo,
                     modifier = Modifier.fillMaxWidth().height(48.dp)
-                ) { Text("Cancel Countdown") }
+                ) { Text(stringResource(id = R.string.ood_cancel_countdown)) }
             }
             LazyColumn(Modifier.fillMaxWidth().weight(1f)) {
                 items(logs) { line -> Text(line) }

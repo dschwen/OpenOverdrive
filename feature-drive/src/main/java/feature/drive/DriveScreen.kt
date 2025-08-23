@@ -6,6 +6,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
 import core.ble.AndroidBleClient
 import core.ble.BleClient
 import core.ble.ConnectionState
@@ -244,7 +245,7 @@ fun MultiPlayerDriveScreen(
     }
 
     val title = displayName ?: address
-    Scaffold(topBar = { TopAppBar(title = { Text("Driving $title") }) }) { padding ->
+    Scaffold(topBar = { TopAppBar(title = { Text(stringResource(id = R.string.ood_driving_title, title)) }) }) { padding ->
         Column(
             Modifier
                 .padding(padding)
@@ -254,7 +255,7 @@ fun MultiPlayerDriveScreen(
         ) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("Battery: ${battery?.let { "$it%" } ?: "?"}")
+                    Text(stringResource(id = R.string.ood_battery_label) + " " + (battery?.let { "$it%" } ?: "?"))
                     if (onCharger == true) {
                         Icon(
                             imageVector = Icons.Outlined.Bolt,
@@ -323,7 +324,7 @@ fun MultiPlayerDriveScreen(
                 colors = ButtonDefaults.buttonColors(containerColor = green),
                 modifier = Modifier.fillMaxWidth().height(64.dp),
                 enabled = controlsEnabled
-            ) { Text("Accelerate", color = textOnColor) }
+            ) { Text(stringResource(id = R.string.ood_accelerate), color = textOnColor) }
 
             // Left + Right (split row)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -348,7 +349,7 @@ fun MultiPlayerDriveScreen(
                     colors = ButtonDefaults.buttonColors(containerColor = blue),
                     modifier = Modifier.weight(1f).height(64.dp),
                     enabled = controlsEnabled
-                ) { Text("Left", color = textOnColor) }
+                ) { Text(stringResource(id = R.string.ood_left), color = textOnColor) }
 
                 Button(
                     onClick = {
@@ -371,7 +372,7 @@ fun MultiPlayerDriveScreen(
                     colors = ButtonDefaults.buttonColors(containerColor = blue),
                     modifier = Modifier.weight(1f).height(64.dp),
                     enabled = controlsEnabled
-                ) { Text("Right", color = textOnColor) }
+                ) { Text(stringResource(id = R.string.ood_right), color = textOnColor) }
             }
 
             // Decelerate (full width)
@@ -408,7 +409,7 @@ fun MultiPlayerDriveScreen(
                 colors = ButtonDefaults.buttonColors(containerColor = red),
                 modifier = Modifier.fillMaxWidth().height(72.dp),
                 enabled = controlsEnabled
-            ) { Text("Brake", color = textOnColor) }
+            ) { Text(stringResource(id = R.string.ood_brake), color = textOnColor) }
 
             Spacer(Modifier.weight(1f))
 
@@ -426,7 +427,7 @@ fun MultiPlayerDriveScreen(
                     label?.let { Text(it, style = MaterialTheme.typography.headlineLarge) }
                 }
                 if (postGoShowing) {
-                    Text("Match started", style = MaterialTheme.typography.titleLarge)
+                    Text(stringResource(id = R.string.ood_match_started), style = MaterialTheme.typography.titleLarge)
                 }
             }
 
@@ -464,7 +465,7 @@ fun MultiPlayerDriveScreen(
                         }
                     },
                     modifier = Modifier.fillMaxWidth().height(48.dp)
-                ) { Text("Quit Match", maxLines = 1) }
+                ) { Text(stringResource(id = R.string.ood_quit_match), maxLines = 1) }
             }
         }
     }

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ood_mp_lobby_title">マルチプレイヤーロビー</string>
+    <string name="ood_mp_bt_perms_required">マルチプレイにはBluetoothの許可が必要です</string>
+    <string name="ood_grant_permissions">許可する</string>
+    <string name="ood_your_name">あなたの名前</string>
+    <string name="ood_laps_label">周回数:</string>
+    <string name="ood_nearby_label">近く:</string>
+    <string name="ood_start_in_label">開始まで:</string>
+    <string name="ood_match_started">レース開始</string>
+    <string name="ood_single_player">シングルプレイ</string>
+    <string name="ood_back">戻る</string>
+    <string name="ood_host_game">ホスト</string>
+    <string name="ood_join_game">参加</string>
+    <string name="ood_leave">退出</string>
+    <string name="ood_peers_label">参加者</string>
+    <string name="ood_start_match">スタート</string>
+    <string name="ood_cancel_countdown">カウントダウンを取消</string>
+</resources>

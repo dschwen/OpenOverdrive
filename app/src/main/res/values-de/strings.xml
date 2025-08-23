@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ood_mp_lobby_title">Mehrspieler-Lobby</string>
+    <string name="ood_mp_bt_perms_required">Bluetooth-Berechtigungen für Mehrspieler erforderlich</string>
+    <string name="ood_grant_permissions">Berechtigungen erteilen</string>
+    <string name="ood_your_name">Dein Name</string>
+    <string name="ood_laps_label">Runden:</string>
+    <string name="ood_nearby_label">Nearby:</string>
+    <string name="ood_start_in_label">Start in:</string>
+    <string name="ood_match_started">Rennen gestartet</string>
+    <string name="ood_single_player">Einzelspieler</string>
+    <string name="ood_back">Zurück</string>
+    <string name="ood_host_game">Spiel hosten</string>
+    <string name="ood_join_game">Spiel beitreten</string>
+    <string name="ood_leave">Verlassen</string>
+    <string name="ood_peers_label">Teilnehmer</string>
+    <string name="ood_start_match">Rennen starten</string>
+    <string name="ood_cancel_countdown">Countdown abbrechen</string>
+</resources>

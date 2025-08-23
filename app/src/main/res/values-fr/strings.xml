@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ood_mp_lobby_title">Salon multijoueur</string>
+    <string name="ood_mp_bt_perms_required">Autorisations Bluetooth requises pour le multijoueur</string>
+    <string name="ood_grant_permissions">Autoriser</string>
+    <string name="ood_your_name">Votre nom</string>
+    <string name="ood_laps_label">Tours :</string>
+    <string name="ood_nearby_label">À proximité :</string>
+    <string name="ood_start_in_label">Départ dans :</string>
+    <string name="ood_match_started">Course démarrée</string>
+    <string name="ood_single_player">Solo</string>
+    <string name="ood_back">Retour</string>
+    <string name="ood_host_game">Héberger</string>
+    <string name="ood_join_game">Rejoindre</string>
+    <string name="ood_leave">Quitter</string>
+    <string name="ood_peers_label">Participants</string>
+    <string name="ood_start_match">Lancer la course</string>
+    <string name="ood_cancel_countdown">Annuler le compte à rebours</string>
+</resources>

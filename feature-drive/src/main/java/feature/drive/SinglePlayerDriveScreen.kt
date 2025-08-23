@@ -6,6 +6,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
 import core.ble.AndroidBleClient
 import core.ble.BleClient
 import core.ble.ConnectionState
@@ -104,7 +105,7 @@ fun SinglePlayerDriveScreen(
     }
 
     val title = displayName ?: address
-    Scaffold(topBar = { TopAppBar(title = { Text("Driving $title") }) }) { padding ->
+    Scaffold(topBar = { TopAppBar(title = { Text(stringResource(id = R.string.ood_driving_title, title)) }) }) { padding ->
         Column(
             Modifier
                 .padding(padding)
@@ -114,7 +115,7 @@ fun SinglePlayerDriveScreen(
         ) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("Battery: ${battery?.let { "$it%" } ?: "?"}")
+                    Text(stringResource(id = R.string.ood_battery_label) + " " + (battery?.let { "$it%" } ?: "?"))
                     if (onCharger == true) { Icon(imageVector = Icons.Outlined.Bolt, contentDescription = "Charging", tint = androidx.compose.ui.graphics.Color(0xFFFFC107)) }
                     if (chargedBattery == true) { Icon(imageVector = Icons.Outlined.BatteryFull, contentDescription = "Charged", tint = androidx.compose.ui.graphics.Color(0xFF4CAF50)) }
                     if (lowBattery == true) { Icon(imageVector = Icons.Outlined.BatteryAlert, contentDescription = "Low battery", tint = androidx.compose.ui.graphics.Color(0xFFD32F2F)) }
@@ -153,7 +154,7 @@ fun SinglePlayerDriveScreen(
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = green),
                 modifier = Modifier.fillMaxWidth().height(64.dp)
-            ) { Text("Accelerate", color = textOnColor) }
+            ) { Text(stringResource(id = R.string.ood_accelerate), color = textOnColor) }
 
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Button(
@@ -171,7 +172,7 @@ fun SinglePlayerDriveScreen(
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = blue),
                     modifier = Modifier.weight(1f).height(64.dp)
-                ) { Text("Left", color = textOnColor) }
+                ) { Text(stringResource(id = R.string.ood_left), color = textOnColor) }
 
                 Button(
                     onClick = {
@@ -188,7 +189,7 @@ fun SinglePlayerDriveScreen(
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = blue),
                     modifier = Modifier.weight(1f).height(64.dp)
-                ) { Text("Right", color = textOnColor) }
+                ) { Text(stringResource(id = R.string.ood_right), color = textOnColor) }
             }
 
             Button(
@@ -217,7 +218,7 @@ fun SinglePlayerDriveScreen(
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = red),
                 modifier = Modifier.fillMaxWidth().height(72.dp)
-            ) { Text("Brake", color = textOnColor) }
+            ) { Text(stringResource(id = R.string.ood_brake), color = textOnColor) }
 
             Spacer(Modifier.weight(1f))
 
@@ -234,7 +235,7 @@ fun SinglePlayerDriveScreen(
                         lastLapTimeMs = null
                     },
                     modifier = Modifier.weight(1f).height(48.dp)
-                ) { Text(if (startPieceId == null) "Mark Start" else "Reset Laps", maxLines = 1) }
+                ) { Text(if (startPieceId == null) stringResource(id = R.string.ood_mark_start) else stringResource(id = R.string.ood_reset_laps), maxLines = 1) }
 
                 OutlinedButton(
                     onClick = {
@@ -246,7 +247,7 @@ fun SinglePlayerDriveScreen(
                         }
                     },
                     modifier = Modifier.weight(1f).height(48.dp)
-                ) { Text("Disconnect", maxLines = 1) }
+                ) { Text(stringResource(id = R.string.ood_disconnect), maxLines = 1) }
             }
         }
     }

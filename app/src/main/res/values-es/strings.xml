@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ood_mp_lobby_title">Sala multijugador</string>
+    <string name="ood_mp_bt_perms_required">Se requieren permisos de Bluetooth para multijugador</string>
+    <string name="ood_grant_permissions">Conceder permisos</string>
+    <string name="ood_your_name">Tu nombre</string>
+    <string name="ood_laps_label">Vueltas:</string>
+    <string name="ood_nearby_label">Cerca:</string>
+    <string name="ood_start_in_label">Empieza en:</string>
+    <string name="ood_match_started">Partida iniciada</string>
+    <string name="ood_single_player">Un jugador</string>
+    <string name="ood_back">Atrás</string>
+    <string name="ood_host_game">Hospedar</string>
+    <string name="ood_join_game">Unirse</string>
+    <string name="ood_leave">Salir</string>
+    <string name="ood_peers_label">Jugadores</string>
+    <string name="ood_start_match">Iniciar partida</string>
+    <string name="ood_cancel_countdown">Cancelar cuenta atrás</string>
+</resources>

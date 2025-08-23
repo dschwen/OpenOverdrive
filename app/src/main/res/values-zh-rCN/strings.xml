@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ood_mp_lobby_title">多人大厅</string>
+    <string name="ood_mp_bt_perms_required">多人模式需要蓝牙权限</string>
+    <string name="ood_grant_permissions">授予权限</string>
+    <string name="ood_your_name">你的名字</string>
+    <string name="ood_laps_label">圈数：</string>
+    <string name="ood_nearby_label">附近：</string>
+    <string name="ood_start_in_label">开始于：</string>
+    <string name="ood_match_started">比赛开始</string>
+    <string name="ood_single_player">单人</string>
+    <string name="ood_back">返回</string>
+    <string name="ood_host_game">创建</string>
+    <string name="ood_join_game">加入</string>
+    <string name="ood_leave">离开</string>
+    <string name="ood_peers_label">玩家</string>
+    <string name="ood_start_match">开始比赛</string>
+    <string name="ood_cancel_countdown">取消倒计时</string>
+</resources>
