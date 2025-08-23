@@ -30,6 +30,7 @@ fun MultiplayerScreen(
 
     var name by remember { mutableStateOf("Player") }
     var isHost by remember { mutableStateOf<Boolean?>(null) }
+    var laps by remember { mutableStateOf(3) }
     var running by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("Idle") }
     var peers by remember { mutableStateOf<List<Peer>>(emptyList()) }
@@ -92,9 +93,11 @@ fun MultiplayerScreen(
                             val bb = java.nio.ByteBuffer.wrap(msg.payload).order(java.nio.ByteOrder.LITTLE_ENDIAN)
                             val hostGoAt = if (bb.remaining() >= 8) bb.long else System.currentTimeMillis() + 4000
                             val countdownSec = if (bb.remaining() >= 1) (bb.get().toInt() and 0xFF) else 3
+                            val targetLaps = if (bb.remaining() >= 1) (bb.get().toInt() and 0xFF) else 3
                             val est = offsetEstimateMs ?: 0L
                             val localGoAt = hostGoAt - est
                             core.net.NetSession.setMatchStartAt(localGoAt)
+                            core.net.NetSession.setTargetLaps(targetLaps)
                             logs.add("<- Start Match: ${countdownSec}s, localGoAt=${localGoAt}")
                             if (!didNavigateToDrive) { didNavigateToDrive = true; onStartDrive(selectedAddress, selectedName) }
                         } else if (msg.type == 2) {
@@ -223,6 +226,15 @@ fun MultiplayerScreen(
                 )
                 Text(selectedName ?: selectedAddress ?: "")
             }
+            // Laps selector (host can change; value is sent with Start Match)
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("Laps:")
+                listOf(1,3,5,10).forEach { n ->
+                    val sel = n == laps
+                    val style = if (sel) ButtonDefaults.buttonColors() else ButtonDefaults.outlinedButtonColors()
+                    if (sel) Button(onClick = { laps = n }) { Text("$n") } else OutlinedButton(onClick = { laps = n }) { Text("$n") }
+                }
+            }
             Text("Status: $status")
             // Nearby status line for quick diagnosis
             val nearbyStatus by remember(transport) {
@@ -272,15 +284,17 @@ fun MultiplayerScreen(
                     onClick = {
                         val countdownSec = 3
                         val hostGoAt = System.currentTimeMillis() + (countdownSec + 1) * 1000L
-                        // payload: [hostGoAt(int64 LE), countdownSec(u8)]
-                        val bb = java.nio.ByteBuffer.allocate(8 + 1).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+                        // payload: [hostGoAt(int64 LE), countdownSec(u8), laps(u8)]
+                        val bb = java.nio.ByteBuffer.allocate(8 + 2).order(java.nio.ByteOrder.LITTLE_ENDIAN)
                         bb.putLong(hostGoAt)
                         bb.put(countdownSec.toByte())
+                        bb.put(laps.toByte())
                         val evt = NetCodec.encode(NetMessage.Event(type = 1, payload = bb.array()))
                         scope.launch {
                             val count = transport?.broadcast(evt) ?: 0
                             logs.add("-> Start Match sent to $count peers")
                             core.net.NetSession.setMatchStartAt(hostGoAt)
+                            core.net.NetSession.setTargetLaps(laps)
                             if (!didNavigateToDrive) { didNavigateToDrive = true; onStartDrive(selectedAddress, selectedName) }
                         }
                     },

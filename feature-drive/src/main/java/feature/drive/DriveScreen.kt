@@ -57,17 +57,36 @@ fun DriveScreen(
     var lastTelemetrySentMs by remember { mutableStateOf(0L) }
     val netTransport by NetSession.transport.collectAsState(initial = null)
     val matchStartAt by NetSession.matchStartAtMs.collectAsState(initial = null)
+    val targetLaps by NetSession.targetLaps.collectAsState(initial = null)
+    // Race/match state
     var nowMs by remember { mutableStateOf(System.currentTimeMillis()) }
+    var wasOnMarker by remember { mutableStateOf(false) }
+    var autoMarkPending by remember { mutableStateOf(false) }
+    var finishedAtMs by remember { mutableStateOf<Long?>(null) }
+    data class Racer(var name: String?, var laps: Int = 0, var bestLapMs: Long? = null, var finishedAt: Long? = null)
+    val racers = remember { mutableStateMapOf<String, Racer>() }
+    val localPeerName = remember(netTransport) { netTransport?.localPeer?.name }
+    LaunchedEffect(localPeerName) { racers["local"] = Racer(name = displayName ?: localPeerName) }
     LaunchedEffect(matchStartAt) {
         while (matchStartAt != null && nowMs < (matchStartAt ?: 0L) + 2000) {
             nowMs = System.currentTimeMillis()
             delay(100)
         }
     }
+    LaunchedEffect(matchStartAt, netTransport) {
+        if (matchStartAt != null && netTransport != null) {
+            autoMarkPending = true
+            laps = 0
+            lastLapTs = 0L
+            lastLapTimeMs = null
+            finishedAtMs = null
+        }
+    }
     val preGo = matchStartAt?.let { nowMs < it } ?: false
     val postGoShowing = matchStartAt?.let { nowMs in it..(it + 1500) } ?: false
+    val controlsEnabled = !preGo
 
-    var wasOnMarker by remember { mutableStateOf(false) }
+    
     LaunchedEffect(address) {
         client.notifications().collectLatest { bytes ->
             when (val msg = VehicleMsgParser.parse(bytes)) {
@@ -95,6 +114,11 @@ fun DriveScreen(
                     }
                     val rp = msg.roadPieceId
                     lastPieceId = rp
+                    if (autoMarkPending && matchStartAt != null && nowMs >= (matchStartAt ?: 0L)) {
+                        startPieceId = rp
+                        wasOnMarker = true
+                        autoMarkPending = false
+                    }
                     val marker = startPieceId
                     val onMarker = (marker != null && rp == marker)
                     if (onMarker && !wasOnMarker) {
@@ -104,6 +128,32 @@ fun DriveScreen(
                             laps += 1
                             lastLapTimeMs = if (lastLapTs == 0L) null else now - lastLapTs
                             lastLapTs = now
+                            // Update local racer stats and broadcast
+                            val r = racers.getOrPut("local") { Racer(name = displayName ?: localPeerName) }
+                            r.laps = laps
+                            if (lastLapTimeMs != null) r.bestLapMs = listOfNotNull(r.bestLapMs, lastLapTimeMs).minOrNull()
+                            netTransport?.let { tr ->
+                                val bb = java.nio.ByteBuffer.allocate(1 + 8 + 8).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+                                bb.put(laps.toByte())
+                                bb.putLong(lastLapTimeMs ?: 0L)
+                                bb.putLong((matchStartAt?.let { now - it } ?: 0L))
+                                val evt = NetCodec.encode(NetMessage.Event(type = 3, payload = bb.array()))
+                                runCatching { tr.broadcast(evt) }
+                            }
+                            targetLaps?.let { tl ->
+                                if (laps >= tl && finishedAtMs == null) {
+                                    finishedAtMs = now
+                                    r.finishedAt = now
+                                    netTransport?.let { tr ->
+                                        val bb = java.nio.ByteBuffer.allocate(1 + 8).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+                                        bb.put(laps.toByte())
+                                        bb.putLong((matchStartAt?.let { now - it } ?: 0L))
+                                        val evt = NetCodec.encode(NetMessage.Event(type = 4, payload = bb.array()))
+                                        runCatching { tr.broadcast(evt) }
+                                    }
+                                    scope.launch { client.write(VehicleMsg.setSpeed(0, 30000, 1)) }
+                                }
+                            }
                         }
                     }
                     wasOnMarker = onMarker
@@ -121,6 +171,12 @@ fun DriveScreen(
 
     // React to connection state: send SDK mode and periodic battery when connected
     val connState by client.connectionState.collectAsState(initial = ConnectionState.Disconnected)
+    // Ensure we are connected when entering Drive (single player path)
+    LaunchedEffect(address) {
+        if (connState is ConnectionState.Disconnected) {
+            runCatching { client.connect(address) }
+        }
+    }
     LaunchedEffect(connState) {
         when (connState) {
             is ConnectionState.Connected -> {
@@ -151,6 +207,37 @@ fun DriveScreen(
                 initSent = false
             }
             is ConnectionState.Connecting -> { /* no-op */ }
+        }
+    }
+
+    // Listen for peer race updates
+    LaunchedEffect(netTransport) {
+        val t = netTransport ?: return@LaunchedEffect
+        launch {
+            t.incoming().collectLatest { (peer, bytes) ->
+                when (val m = NetCodec.decode(bytes)) {
+                    is NetMessage.Event -> when (m.type) {
+                        3 -> {
+                            val bb = java.nio.ByteBuffer.wrap(m.payload).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+                            val lp = (bb.get().toInt() and 0xFF)
+                            val lapMs = bb.long
+                            val elapsed = bb.long
+                            val r = racers.getOrPut(peer.id) { Racer(name = peer.name) }
+                            r.laps = lp
+                            if (lapMs > 0) r.bestLapMs = listOfNotNull(r.bestLapMs, lapMs).minOrNull()
+                        }
+                        4 -> {
+                            val bb = java.nio.ByteBuffer.wrap(m.payload).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+                            val lp = (bb.get().toInt() and 0xFF)
+                            val elapsed = bb.long
+                            val r = racers.getOrPut(peer.id) { Racer(name = peer.name) }
+                            r.laps = lp
+                            r.finishedAt = (matchStartAt?.let { it + elapsed } ?: System.currentTimeMillis())
+                        }
+                    }
+                    else -> {}
+                }
+            }
         }
     }
 
@@ -205,11 +292,12 @@ fun DriveScreen(
                 onValueChange = { v -> speed = v.toInt() },
                 onValueChangeFinished = {
                     scope.launch {
-                        val target = if (preGo) 0 else speed
+                        val target = if (!controlsEnabled) 0 else speed
                         client.write(VehicleMsg.setSpeed(target, 25000, 1))
                     }
                 },
-                valueRange = 0f..1500f
+                valueRange = 0f..1500f,
+                enabled = controlsEnabled
             )
 
             // Controls grid: Accelerate, Left+Right, Decelerate, Brake
@@ -223,13 +311,12 @@ fun DriveScreen(
             Button(
                 onClick = {
                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                    if (!preGo) {
-                        speed = (speed + 150).coerceAtMost(1500)
-                        scope.launch { client.write(VehicleMsg.setSpeed(speed, 25000, 1)) }
-                    }
+                    speed = (speed + 150).coerceAtMost(1500)
+                    scope.launch { client.write(VehicleMsg.setSpeed(speed, 25000, 1)) }
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = green),
-                modifier = Modifier.fillMaxWidth().height(64.dp)
+                modifier = Modifier.fillMaxWidth().height(64.dp),
+                enabled = controlsEnabled
             ) { Text("Accelerate", color = textOnColor) }
 
             // Left + Right (split row)
@@ -239,7 +326,7 @@ fun DriveScreen(
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         scope.launch {
                             val fwd = if (speed < 300) 300 else speed
-                            if (preGo) client.write(VehicleMsg.setSpeed(0, 25000, 1)) else client.write(VehicleMsg.setSpeed(fwd, 25000, 1))
+                            if (!controlsEnabled) client.write(VehicleMsg.setSpeed(0, 25000, 1)) else client.write(VehicleMsg.setSpeed(fwd, 25000, 1))
                             delay(100)
                             client.write(VehicleMsg.setOffsetFromCenter(0f))
                             delay(100)
@@ -248,7 +335,8 @@ fun DriveScreen(
                         }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = blue),
-                    modifier = Modifier.weight(1f).height(64.dp)
+                    modifier = Modifier.weight(1f).height(64.dp),
+                    enabled = controlsEnabled
                 ) { Text("Left", color = textOnColor) }
 
                 Button(
@@ -256,7 +344,7 @@ fun DriveScreen(
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         scope.launch {
                             val fwd = if (speed < 300) 300 else speed
-                            if (preGo) client.write(VehicleMsg.setSpeed(0, 25000, 1)) else client.write(VehicleMsg.setSpeed(fwd, 25000, 1))
+                            if (!controlsEnabled) client.write(VehicleMsg.setSpeed(0, 25000, 1)) else client.write(VehicleMsg.setSpeed(fwd, 25000, 1))
                             delay(100)
                             client.write(VehicleMsg.setOffsetFromCenter(0f))
                             delay(100)
@@ -265,7 +353,8 @@ fun DriveScreen(
                         }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = blue),
-                    modifier = Modifier.weight(1f).height(64.dp)
+                    modifier = Modifier.weight(1f).height(64.dp),
+                    enabled = controlsEnabled
                 ) { Text("Right", color = textOnColor) }
             }
 
@@ -277,7 +366,8 @@ fun DriveScreen(
                     scope.launch { client.write(VehicleMsg.setSpeed(speed, if (speed == 0) 30000 else 25000, 1)) }
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = orange),
-                modifier = Modifier.fillMaxWidth().height(64.dp)
+                modifier = Modifier.fillMaxWidth().height(64.dp),
+                enabled = controlsEnabled
             ) { Text("Decelerate", color = textOnColor) }
 
             // Brake (full width)
@@ -293,7 +383,8 @@ fun DriveScreen(
                     scope.launch { client.write(VehicleMsg.setSpeed(0, 30000, 1)) }
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = red),
-                modifier = Modifier.fillMaxWidth().height(72.dp)
+                modifier = Modifier.fillMaxWidth().height(72.dp),
+                enabled = controlsEnabled
             ) { Text("Brake", color = textOnColor) }
 
             Spacer(Modifier.weight(1f))
@@ -313,6 +404,20 @@ fun DriveScreen(
                 }
                 if (postGoShowing) {
                     Text("Match started", style = MaterialTheme.typography.titleLarge)
+                }
+            }
+
+            // Race results overlay when finished
+            if (targetLaps != null && finishedAtMs != null) {
+                val sorted = racers.entries.sortedWith(compareBy({ it.value.finishedAt == null }, { it.value.finishedAt ?: Long.MAX_VALUE }))
+                Text("Results", style = MaterialTheme.typography.titleMedium)
+                sorted.forEachIndexed { idx, e ->
+                    val place = arrayOf("1st","2nd","3rd","4th","5th").getOrElse(idx) { "${idx+1}." }
+                    val name = e.value.name ?: e.key
+                    val total = e.value.finishedAt?.let { fa -> matchStartAt?.let { ms -> fa - ms } }
+                    val totalStr = total?.let { ms -> "${ms/1000}.${(ms%1000)/100}s" } ?: "DNF (${e.value.laps}/${targetLaps})"
+                    val best = e.value.bestLapMs?.let { ms -> "best ${ms/1000}.${(ms%1000)/100}s" } ?: ""
+                    Text("$place  $name  $totalStr  $best")
                 }
             }
 
@@ -338,6 +443,11 @@ fun DriveScreen(
                             runCatching { client.write(VehicleMsg.setSpeed(0, 30000, 1)) }
                             delay(150)
                             client.disconnect()
+                            // Leave multiplayer if active
+                            NetSession.setMatchStartAt(null)
+                            NetSession.setTargetLaps(null)
+                            NetSession.transport.value?.let { tr -> runCatching { tr.stop() } }
+                            NetSession.set(null)
                             onBack()
                         }
                     },

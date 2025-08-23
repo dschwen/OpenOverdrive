@@ -14,4 +14,10 @@ object NetSession {
     val matchStartAtMs: StateFlow<Long?> = _matchStartAtMs
 
     fun setMatchStartAt(startAtLocalMs: Long?) { _matchStartAtMs.value = startAtLocalMs }
+
+    // Target laps for the current match (null when not set)
+    private val _targetLaps = MutableStateFlow<Int?>(null)
+    val targetLaps: StateFlow<Int?> = _targetLaps
+
+    fun setTargetLaps(laps: Int?) { _targetLaps.value = laps }
 }
