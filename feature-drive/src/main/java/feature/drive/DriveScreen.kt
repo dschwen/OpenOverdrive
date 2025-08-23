@@ -65,6 +65,7 @@ fun DriveScreen(
         }
     }
     val preGo = matchStartAt?.let { nowMs < it } ?: false
+    val postGoShowing = matchStartAt?.let { nowMs in it..(it + 1500) } ?: false
 
     var wasOnMarker by remember { mutableStateOf(false) }
     LaunchedEffect(address) {
@@ -297,10 +298,10 @@ fun DriveScreen(
 
             Spacer(Modifier.weight(1f))
 
-            // Countdown indicator
+            // Countdown/Go indicator + started overlay
             matchStartAt?.let { goAt ->
                 val remaining = goAt - nowMs
-                if (remaining > -300 && remaining <= 4000) {
+                if (remaining <= 4000) {
                     val label = when {
                         remaining > 3000 -> "3"
                         remaining > 2000 -> "2"
@@ -309,6 +310,9 @@ fun DriveScreen(
                         else -> null
                     }
                     label?.let { Text(it, style = MaterialTheme.typography.headlineLarge) }
+                }
+                if (postGoShowing) {
+                    Text("Match started", style = MaterialTheme.typography.titleLarge)
                 }
             }
 

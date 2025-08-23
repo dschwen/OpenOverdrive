@@ -1,6 +1,7 @@
 package de.schwen.openoverdrive
 
 import android.content.Context
+import android.content.SharedPreferences
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -25,6 +26,11 @@ fun MultiplayerScreen(onBack: () -> Unit) {
     var peers by remember { mutableStateOf<List<Peer>>(emptyList()) }
     var offsetEstimateMs by remember { mutableStateOf<Long?>(null) } // client-side estimate
     val logs = remember { mutableStateListOf<String>() }
+    // Persisted preferences
+    val prefs: SharedPreferences = remember(ctx) { ctx.getSharedPreferences("openoverdrive", Context.MODE_PRIVATE) }
+    LaunchedEffect(Unit) {
+        name = prefs.getString("player_name", name) ?: name
+    }
 
     // Hold references to transport/services while running
     var transport by remember { mutableStateOf<Transport?>(null) }
@@ -53,17 +59,20 @@ fun MultiplayerScreen(onBack: () -> Unit) {
                             val reply = NetCodec.encode(NetMessage.TimeSync(tHost = msg.tHost, seq = msg.seq, tClient = now))
                             transport?.send(peer, reply)
                             logs.add("<- TimeSync seq=${msg.seq}; offset≈${offsetEstimateMs}ms; replied")
-                        } else if (isHost && msg.tClient != null) {
-                            // Host: compute RTT and offset ~ tClientRecv - (tHostSend + RTT/2)
-                            val tHs = sendTimes[msg.seq]
-                            val tHr = System.currentTimeMillis()
-                            if (tHs != null) {
-                                val rtt = tHr - tHs
-                                val off = msg.tClient - (tHs + rtt / 2)
-                                offsetByPeer[peer.id] = off
-                                logs.add("<- TimeSync ack seq=${msg.seq}; RTT=${rtt}ms; offset≈${off}ms from ${peer.name ?: peer.id}")
-                            } else {
-                                logs.add("<- TimeSync ack seq=${msg.seq}")
+                        } else if (isHost) {
+                            val tClient = msg.tClient
+                            if (tClient != null) {
+                                // Host: compute RTT and offset ~ tClientRecv - (tHostSend + RTT/2)
+                                val tHs = sendTimes[msg.seq]
+                                val tHr = System.currentTimeMillis()
+                                if (tHs != null) {
+                                    val rtt = tHr - tHs
+                                    val off = tClient - (tHs + rtt / 2)
+                                    offsetByPeer[peer.id] = off
+                                    logs.add("<- TimeSync ack seq=${msg.seq}; RTT=${rtt}ms; offset≈${off}ms from ${peer.name ?: peer.id}")
+                                } else {
+                                    logs.add("<- TimeSync ack seq=${msg.seq}")
+                                }
                             }
                         }
                     }
@@ -77,6 +86,10 @@ fun MultiplayerScreen(onBack: () -> Unit) {
                             val localGoAt = hostGoAt - est
                             core.net.NetSession.setMatchStartAt(localGoAt)
                             logs.add("<- Start Match: ${countdownSec}s, localGoAt=${localGoAt}")
+                        } else if (msg.type == 2) {
+                            // Cancel countdown
+                            core.net.NetSession.setMatchStartAt(null)
+                            logs.add("<- Cancel Match Countdown")
                         }
                     }
                     else -> {
@@ -147,10 +160,29 @@ fun MultiplayerScreen(onBack: () -> Unit) {
         }
     }
 
+    // Countdown state for host/client UI
+    val matchStartAt by core.net.NetSession.matchStartAtMs.collectAsState(initial = null)
+    var nowMs by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(matchStartAt) {
+        while (matchStartAt != null && nowMs < (matchStartAt ?: 0L) + 2000) {
+            nowMs = System.currentTimeMillis()
+            kotlinx.coroutines.delay(100)
+        }
+    }
+    val preGo = matchStartAt?.let { nowMs < it } ?: false
+    val postGoShowing = matchStartAt?.let { nowMs in it..(it + 1500) } ?: false
+
     Scaffold(topBar = { TopAppBar(title = { Text("Multiplayer Lobby") }) }) { padding ->
         Column(Modifier.padding(padding).padding(16.dp).fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Your name") })
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = {
+                        name = it
+                        prefs.edit().putString("player_name", it).apply()
+                    },
+                    label = { Text("Your name") }
+                )
                 Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                     Text("Host")
                     Switch(checked = isHost, onCheckedChange = { isHost = it })
@@ -159,6 +191,21 @@ fun MultiplayerScreen(onBack: () -> Unit) {
             Text("Status: $status")
             if (!isHost) {
                 Text("Time offset (≈): ${offsetEstimateMs?.let { "$it ms" } ?: "?"}")
+            }
+            // Countdown/Go indicator in lobby, to make state clear
+            matchStartAt?.let { goAt ->
+                val remaining = goAt - nowMs
+                val label = when {
+                    remaining > 3000 -> "3"
+                    remaining > 2000 -> "2"
+                    remaining > 1000 -> "1"
+                    remaining > -200 -> "Go!"
+                    else -> null
+                }
+                label?.let { Text("Start in: $it", style = MaterialTheme.typography.titleMedium) }
+                if (postGoShowing) {
+                    Text("Match started", style = MaterialTheme.typography.titleMedium)
+                }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 if (!running) Button(onClick = { startNearby(ctx) }) { Text("Start") } else Button(onClick = { stopNearby() }) { Text("Stop") }
@@ -202,7 +249,18 @@ fun MultiplayerScreen(onBack: () -> Unit) {
                             logs.add("-> Start Match sent to $count peers")
                             core.net.NetSession.setMatchStartAt(hostGoAt)
                         }
-                    }, enabled = running) { Text("Start Match") }
+                    }, enabled = running && !preGo) { Text("Start Match") }
+
+                    // Allow host to cancel/reset the countdown while it's active
+                    Button(onClick = {
+                        // Event type 2 = Cancel Match Countdown
+                        val evt = NetCodec.encode(NetMessage.Event(type = 2, payload = ByteArray(0)))
+                        scope.launch {
+                            val count = transport?.broadcast(evt) ?: 0
+                            logs.add("-> Cancel Countdown sent to $count peers")
+                            core.net.NetSession.setMatchStartAt(null)
+                        }
+                    }, enabled = running && preGo) { Text("Cancel Countdown") }
                 }
             }
             LazyColumn(Modifier.fillMaxWidth().weight(1f)) {

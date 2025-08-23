@@ -85,27 +85,27 @@ class AndroidBleClient(private val context: Context) : BleClient {
     }
 
     private fun resolveName(result: ScanResult): String? {
-        val advertisedName = result.device?.name ?: result.scanRecord?.deviceName
-        if (!advertisedName.isNullOrBlank()) return advertisedName
-        // Fallback to model name from manufacturer data
-        val sr = result.scanRecord ?: return null
-        val msd = sr.manufacturerSpecificData ?: return null
-        // Per PROTOCOL-REVERSE.md: companyId 61374, byte[1] is model ID
-        val COMPANY_ID = 61374
-        val preferred = msd.get(COMPANY_ID)
-        val modelId: Int? = when {
-            preferred != null && preferred.size >= 2 -> preferred[1].toInt() and 0xFF
-            else -> {
-                // Fallback: scan any MSD entry and try to interpret byte[1] as model id
-                var id: Int? = null
-                for (i in 0 until msd.size()) {
-                    val data = msd.valueAt(i) ?: continue
-                    if (data.size >= 2) { id = data[1].toInt() and 0xFF; break }
+        // Prefer model from manufacturer data when available, as some cars
+        // advertise corrupted/garbled names on certain phones.
+        val sr = result.scanRecord
+        val msd = sr?.manufacturerSpecificData
+        val COMPANY_ID = 61374 // see PROTOCOL-REVERSE.md
+        var model: String? = null
+        if (msd != null) {
+            val preferred = msd.get(COMPANY_ID)
+            val modelId: Int? = when {
+                preferred != null && preferred.size >= 2 -> preferred[1].toInt() and 0xFF
+                else -> {
+                    // Fallback: scan any MSD entry and try byte[1] as model id
+                    var id: Int? = null
+                    for (i in 0 until msd.size()) {
+                        val data = msd.valueAt(i) ?: continue
+                        if (data.size >= 2) { id = data[1].toInt() and 0xFF; break }
+                    }
+                    id
                 }
-                id
             }
-        }
-        val model = when (modelId) {
+            model = when (modelId) {
             1 -> "Kourai"
             2 -> "Boson"
             3 -> "Rho"
@@ -125,9 +125,26 @@ class AndroidBleClient(private val context: Context) : BleClient {
             18 -> "Mammoth"
             19 -> "Dynamo"
             20 -> "Nuke Phantom"
-            else -> null
+                else -> null
+            }
         }
-        return model
+        if (!model.isNullOrBlank()) return model
+
+        // Fall back to advertised name if model not resolved
+        val advertisedName = result.device?.name ?: sr?.deviceName
+        // Guard against obviously broken names (very short prefixes before "Drive")
+        if (!advertisedName.isNullOrBlank()) {
+            val safe = advertisedName.trim()
+            val suspicious = run {
+                val idx = safe.indexOf("Drive")
+                if (idx > 0) {
+                    val prefix = safe.substring(0, idx).trim()
+                    prefix.length <= 3 || prefix.any { ch -> !(ch.isLetter() || ch == ' ' || ch == '-' || ch == '\'') }
+                } else false
+            }
+            if (!suspicious) return safe
+        }
+        return null
     }
 
     @SuppressLint("MissingPermission")
