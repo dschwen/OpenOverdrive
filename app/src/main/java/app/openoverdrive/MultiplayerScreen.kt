@@ -15,17 +15,21 @@ import kotlinx.coroutines.launch
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
 import android.os.Build
-import data.CarRepository
 import kotlinx.coroutines.flow.first
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalPermissionsApi::class)
 @Composable
-fun MultiplayerScreen(onBack: () -> Unit, onStartDrive: (String?, String?) -> Unit = { _, _ -> }) {
+fun MultiplayerScreen(
+    selectedAddress: String?,
+    selectedName: String?,
+    onBack: () -> Unit,
+    onStartDrive: (String?, String?) -> Unit = { _, _ -> }
+) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
 
     var name by remember { mutableStateOf("Player") }
-    var isHost by remember { mutableStateOf(true) }
+    var isHost by remember { mutableStateOf<Boolean?>(null) }
     var running by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("Idle") }
     var peers by remember { mutableStateOf<List<Peer>>(emptyList()) }
@@ -43,7 +47,6 @@ fun MultiplayerScreen(onBack: () -> Unit, onStartDrive: (String?, String?) -> Un
     var clientService by remember { mutableStateOf<ClientService?>(null) }
     val offsetByPeer = remember { mutableStateMapOf<String, Long>() }
     val sendTimes = remember { mutableStateMapOf<Int, Long>() }
-    val carRepo = remember { CarRepository(ctx, BleProvider.client) }
     var didNavigateToDrive by remember { mutableStateOf(false) }
 
     // Incoming listener
@@ -59,14 +62,14 @@ fun MultiplayerScreen(onBack: () -> Unit, onStartDrive: (String?, String?) -> Un
                 val msg = core.net.NetCodec.decode(bytes)
                 when (msg) {
                     is NetMessage.TimeSync -> {
-                        if (!isHost && msg.tClient == null) {
+                        if (isHost == false && msg.tClient == null) {
                             // Client: estimate offset and reply with tClient
                             val now = System.currentTimeMillis()
                             offsetEstimateMs = msg.tHost - now
                             val reply = NetCodec.encode(NetMessage.TimeSync(tHost = msg.tHost, seq = msg.seq, tClient = now))
                             transport?.send(peer, reply)
                             logs.add("<- TimeSync seq=${msg.seq}; offset≈${offsetEstimateMs}ms; replied")
-                        } else if (isHost) {
+                        } else if (isHost == true) {
                             val tClient = msg.tClient
                             if (tClient != null) {
                                 // Host: compute RTT and offset ~ tClientRecv - (tHostSend + RTT/2)
@@ -93,8 +96,7 @@ fun MultiplayerScreen(onBack: () -> Unit, onStartDrive: (String?, String?) -> Un
                             val localGoAt = hostGoAt - est
                             core.net.NetSession.setMatchStartAt(localGoAt)
                             logs.add("<- Start Match: ${countdownSec}s, localGoAt=${localGoAt}")
-                            // Navigate to Drive screen if a last-connected car exists
-                navigateToDriveIfAvailable(scope = scope, carRepo = carRepo, logs = logs, getDidNavigate = { didNavigateToDrive }, setDidNavigate = { didNavigateToDrive = it }, onStartDrive = onStartDrive)
+                            if (!didNavigateToDrive) { didNavigateToDrive = true; onStartDrive(selectedAddress, selectedName) }
                         } else if (msg.type == 2) {
                             // Cancel countdown
                             core.net.NetSession.setMatchStartAt(null)
@@ -113,11 +115,11 @@ fun MultiplayerScreen(onBack: () -> Unit, onStartDrive: (String?, String?) -> Un
     fun startNearby(context: Context) {
         if (running) return
         val serviceId = "de.schwen.openoverdrive.session"
-        val role: Role = if (isHost) Role.Host else Role.Client
+        val role: Role = if (isHost == true) Role.Host else Role.Client
         val t = NearbyTransport(context, role, serviceId, name)
         transport = t
         core.net.NetSession.set(t)
-        if (isHost) {
+        if (isHost == true) {
             val host = HostService(t)
             hostService = host
             host.start()
@@ -134,7 +136,7 @@ fun MultiplayerScreen(onBack: () -> Unit, onStartDrive: (String?, String?) -> Un
             if (!ok) status = "Failed to start"
         }
         // Host: send periodic TimeSync
-        if (isHost) {
+        if (isHost == true) {
             scope.launch {
                 var seq = 1
                 while (true) {
@@ -219,10 +221,7 @@ fun MultiplayerScreen(onBack: () -> Unit, onStartDrive: (String?, String?) -> Un
                     },
                     label = { Text("Your name") }
                 )
-                Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                    Text("Host")
-                    Switch(checked = isHost, onCheckedChange = { isHost = it })
-                }
+                Text(selectedName ?: selectedAddress ?: "")
             }
             Text("Status: $status")
             // Nearby status line for quick diagnosis
@@ -230,7 +229,7 @@ fun MultiplayerScreen(onBack: () -> Unit, onStartDrive: (String?, String?) -> Un
                 (transport as? NearbyTransport)?.status ?: kotlinx.coroutines.flow.MutableStateFlow("Idle")
             }.collectAsState(initial = "Idle")
             Text("Nearby: $nearbyStatus")
-            if (!isHost) {
+            if (isHost == false) {
                 Text("Time offset (≈): ${offsetEstimateMs?.let { "$it ms" } ?: "?"}")
             }
             // Countdown/Go indicator in lobby, to make state clear
@@ -249,9 +248,14 @@ fun MultiplayerScreen(onBack: () -> Unit, onStartDrive: (String?, String?) -> Un
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                val canStart = permissions.allPermissionsGranted
-                if (!running) Button(onClick = { startNearby(ctx) }, enabled = canStart) { Text("Start") } else Button(onClick = { stopNearby() }) { Text("Stop") }
+                Button(onClick = { onStartDrive(selectedAddress, selectedName) }, enabled = selectedAddress != null) { Text("Single Player") }
                 OutlinedButton(onClick = onBack) { Text("Back") }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                val canStart = permissions.allPermissionsGranted
+                Button(onClick = { isHost = true; startNearby(ctx) }, enabled = !running && canStart) { Text("Host Game") }
+                Button(onClick = { isHost = false; startNearby(ctx) }, enabled = !running && canStart) { Text("Join Game") }
+                if (running) OutlinedButton(onClick = { stopNearby() }) { Text("Leave") }
             }
             HorizontalDivider()
             Text("Peers (${peers.size})")
@@ -262,7 +266,7 @@ fun MultiplayerScreen(onBack: () -> Unit, onStartDrive: (String?, String?) -> Un
                 }
             }
             // Host controls (prominent)
-            if (isHost) {
+            if (isHost == true) {
                 val green = androidx.compose.ui.graphics.Color(0xFF2E7D32)
                 Button(
                     onClick = {
@@ -277,7 +281,7 @@ fun MultiplayerScreen(onBack: () -> Unit, onStartDrive: (String?, String?) -> Un
                             val count = transport?.broadcast(evt) ?: 0
                             logs.add("-> Start Match sent to $count peers")
                             core.net.NetSession.setMatchStartAt(hostGoAt)
-                            navigateToDriveIfAvailable(scope = scope, carRepo = carRepo, logs = logs, getDidNavigate = { didNavigateToDrive }, setDidNavigate = { didNavigateToDrive = it }, onStartDrive = onStartDrive)
+                            if (!didNavigateToDrive) { didNavigateToDrive = true; onStartDrive(selectedAddress, selectedName) }
                         }
                     },
                     enabled = running && !preGo,
@@ -305,16 +309,4 @@ fun MultiplayerScreen(onBack: () -> Unit, onStartDrive: (String?, String?) -> Un
     }
 }
 
-private fun navigateToDriveIfAvailable(scope: kotlinx.coroutines.CoroutineScope, carRepo: data.CarRepository, logs: MutableList<String>, getDidNavigate: () -> Boolean, setDidNavigate: (Boolean) -> Unit, onStartDrive: (String?, String?) -> Unit) {
-    if (getDidNavigate()) return
-    scope.launch {
-        val profiles = runCatching { carRepo.profilesFlow.first() }.getOrDefault(emptyList())
-        val last = profiles.maxByOrNull { it.lastConnected ?: 0L }
-        if (last != null) {
-            setDidNavigate(true)
-            onStartDrive(last.deviceAddress, last.displayName ?: last.lastSeenName)
-        } else {
-            logs.add("(no last-connected car to drive)")
-        }
-    }
-}
+//

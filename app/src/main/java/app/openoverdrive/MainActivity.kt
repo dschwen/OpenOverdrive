@@ -36,7 +36,8 @@ fun AppNav(navController: NavHostController = rememberNavController()) {
         composable("discovery") {
             DiscoveryScreen(
                 onConnected = { deviceAddress ->
-                    navController.navigate("drive/$deviceAddress")
+                    // After selecting a car, go to the multiplayer lobby for that car
+                    navController.navigate("lobby/$deviceAddress")
                 },
                 bleClient = bleClient,
                 onOpenDiagnostics = { navController.navigate("diagnostics") },
@@ -51,13 +52,20 @@ fun AppNav(navController: NavHostController = rememberNavController()) {
         composable("diagnostics") {
             DiagnosticsScreen(onBack = { navController.popBackStack() }, bleClient = bleClient)
         }
-        composable("multiplayer") {
+        // New per-car multiplayer lobby route
+        composable("lobby/{address}?name={name}") { backStackEntry ->
+            val address = backStackEntry.arguments?.getString("address")
+            val name = backStackEntry.arguments?.getString("name")
             MultiplayerScreen(
+                selectedAddress = address,
+                selectedName = name,
                 onBack = { navController.popBackStack() },
-                onStartDrive = { address, name ->
-                    if (!address.isNullOrBlank()) {
-                        val encoded = name?.let { java.net.URLEncoder.encode(it, "UTF-8") }
-                        val route = if (encoded != null) "drive/$address?name=$encoded" else "drive/$address"
+                onStartDrive = { addr, nm ->
+                    val a = addr ?: address
+                    val n = nm ?: name
+                    if (!a.isNullOrBlank()) {
+                        val encoded = n?.let { java.net.URLEncoder.encode(it, "UTF-8") }
+                        val route = if (encoded != null) "drive/$a?name=$encoded" else "drive/$a"
                         navController.navigate(route)
                     }
                 }
