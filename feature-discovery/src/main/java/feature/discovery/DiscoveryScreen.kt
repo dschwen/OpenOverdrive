@@ -41,7 +41,8 @@ fun DiscoveryScreen(
     onConnected: (String) -> Unit,
     bleClient: BleClient? = null,
     carRepositoryProvider: (android.content.Context, BleClient) -> CarRepository = { ctx, ble -> CarRepository(ctx, ble) },
-    onOpenDiagnostics: () -> Unit = {}
+    onOpenDiagnostics: () -> Unit = {},
+    onOpenMultiplayer: () -> Unit = {}
 ) {
     val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -81,6 +82,7 @@ fun DiscoveryScreen(
                 title = { Text(stringResource(id = R.string.ood_discover_connect_title)) },
                 actions = {
                     TextButton(onClick = onOpenDiagnostics) { Text(stringResource(id = R.string.ood_diagnostics)) }
+                    TextButton(onClick = onOpenMultiplayer) { Text("Multiplayer") }
                 }
             )
         },

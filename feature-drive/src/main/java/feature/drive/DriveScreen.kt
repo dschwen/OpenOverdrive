@@ -24,6 +24,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Bolt
 import androidx.compose.material.icons.outlined.BatteryFull
 import androidx.compose.material.icons.outlined.BatteryAlert
+import core.net.NetSession
+import core.net.NetCodec
+import core.net.NetMessage
  
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -50,6 +53,18 @@ fun DriveScreen(
     var onCharger by remember { mutableStateOf<Boolean?>(null) }
     var chargedBattery by remember { mutableStateOf<Boolean?>(null) }
     var lowBattery by remember { mutableStateOf<Boolean?>(null) }
+    // Multiplayer session + countdown state
+    var lastTelemetrySentMs by remember { mutableStateOf(0L) }
+    val netTransport by NetSession.transport.collectAsState(initial = null)
+    val matchStartAt by NetSession.matchStartAtMs.collectAsState(initial = null)
+    var nowMs by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(matchStartAt) {
+        while (matchStartAt != null && nowMs < (matchStartAt ?: 0L) + 2000) {
+            nowMs = System.currentTimeMillis()
+            delay(100)
+        }
+    }
+    val preGo = matchStartAt?.let { nowMs < it } ?: false
 
     var wasOnMarker by remember { mutableStateOf(false) }
     LaunchedEffect(address) {
@@ -58,6 +73,25 @@ fun DriveScreen(
                 is VehicleMessage.BatteryLevel -> { battery = msg.percent }
                 is VehicleMessage.CarStatus -> { onCharger = msg.onCharger; chargedBattery = msg.chargedBattery; lowBattery = msg.lowBattery }
                 is VehicleMessage.PositionUpdate -> {
+                    // Optional: publish telemetry to host if a net session is active (client role)
+                    val t = netTransport
+                    val now = System.currentTimeMillis()
+                    if (t != null && now - lastTelemetrySentMs >= 100) {
+                        val flags = msg.parsingFlags ?: 0
+                        val payload = NetCodec.encode(
+                            NetMessage.CarTelemetry(
+                                pieceId = msg.roadPieceId,
+                                locationId = msg.locationId,
+                                offsetMm = msg.offsetFromCenter,
+                                speedMmps = msg.speedMmPerSec,
+                                flags = flags,
+                                tsClient = now
+                            )
+                        )
+                        // Best-effort; ignore result
+                        runCatching { t.broadcast(payload) }
+                        lastTelemetrySentMs = now
+                    }
                     val rp = msg.roadPieceId
                     lastPieceId = rp
                     val marker = startPieceId
@@ -170,7 +204,8 @@ fun DriveScreen(
                 onValueChange = { v -> speed = v.toInt() },
                 onValueChangeFinished = {
                     scope.launch {
-                        client.write(VehicleMsg.setSpeed(speed, 25000, 1))
+                        val target = if (preGo) 0 else speed
+                        client.write(VehicleMsg.setSpeed(target, 25000, 1))
                     }
                 },
                 valueRange = 0f..1500f
@@ -187,8 +222,10 @@ fun DriveScreen(
             Button(
                 onClick = {
                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                    speed = (speed + 150).coerceAtMost(1500)
-                    scope.launch { client.write(VehicleMsg.setSpeed(speed, 25000, 1)) }
+                    if (!preGo) {
+                        speed = (speed + 150).coerceAtMost(1500)
+                        scope.launch { client.write(VehicleMsg.setSpeed(speed, 25000, 1)) }
+                    }
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = green),
                 modifier = Modifier.fillMaxWidth().height(64.dp)
@@ -201,7 +238,7 @@ fun DriveScreen(
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         scope.launch {
                             val fwd = if (speed < 300) 300 else speed
-                            client.write(VehicleMsg.setSpeed(fwd, 25000, 1))
+                            if (preGo) client.write(VehicleMsg.setSpeed(0, 25000, 1)) else client.write(VehicleMsg.setSpeed(fwd, 25000, 1))
                             delay(100)
                             client.write(VehicleMsg.setOffsetFromCenter(0f))
                             delay(100)
@@ -218,7 +255,7 @@ fun DriveScreen(
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         scope.launch {
                             val fwd = if (speed < 300) 300 else speed
-                            client.write(VehicleMsg.setSpeed(fwd, 25000, 1))
+                            if (preGo) client.write(VehicleMsg.setSpeed(0, 25000, 1)) else client.write(VehicleMsg.setSpeed(fwd, 25000, 1))
                             delay(100)
                             client.write(VehicleMsg.setOffsetFromCenter(0f))
                             delay(100)
@@ -259,6 +296,21 @@ fun DriveScreen(
             ) { Text("Brake", color = textOnColor) }
 
             Spacer(Modifier.weight(1f))
+
+            // Countdown indicator
+            matchStartAt?.let { goAt ->
+                val remaining = goAt - nowMs
+                if (remaining > -300 && remaining <= 4000) {
+                    val label = when {
+                        remaining > 3000 -> "3"
+                        remaining > 2000 -> "2"
+                        remaining > 1000 -> "1"
+                        remaining > -200 -> "Go!"
+                        else -> null
+                    }
+                    label?.let { Text(it, style = MaterialTheme.typography.headlineLarge) }
+                }
+            }
 
             Row(
                 Modifier.fillMaxWidth(),

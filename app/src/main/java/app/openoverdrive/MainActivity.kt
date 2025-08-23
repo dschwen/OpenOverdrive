@@ -39,7 +39,8 @@ fun AppNav(navController: NavHostController = rememberNavController()) {
                     navController.navigate("drive/$deviceAddress")
                 },
                 bleClient = bleClient,
-                onOpenDiagnostics = { navController.navigate("diagnostics") }
+                onOpenDiagnostics = { navController.navigate("diagnostics") },
+                onOpenMultiplayer = { navController.navigate("multiplayer") }
             )
         }
         composable("drive/{address}?name={name}") { backStackEntry ->
@@ -49,6 +50,9 @@ fun AppNav(navController: NavHostController = rememberNavController()) {
         }
         composable("diagnostics") {
             DiagnosticsScreen(onBack = { navController.popBackStack() }, bleClient = bleClient)
+        }
+        composable("multiplayer") {
+            MultiplayerScreen(onBack = { navController.popBackStack() })
         }
     }
 }

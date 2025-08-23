@@ -24,6 +24,7 @@ class NearbyTransport(
 
     private val incomingFlow = MutableSharedFlow<Pair<Peer, ByteArray>>(extraBufferCapacity = 128, onBufferOverflow = BufferOverflow.DROP_OLDEST)
     private val peers = ConcurrentHashMap<String, Peer>() // endpointId -> Peer
+    private val peersFlow = MutableSharedFlow<List<Peer>>(replay = 1, extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
 
     private val payloadCb = object : PayloadCallback() {
         override fun onPayloadReceived(endpointId: String, payload: Payload) {
@@ -43,14 +44,17 @@ class NearbyTransport(
             client.acceptConnection(endpointId, payloadCb)
             val p = Peer(id = endpointId, name = info.endpointName)
             peers[endpointId] = p
+            emitPeers()
         }
         override fun onConnectionResult(endpointId: String, result: ConnectionResolution) {
             if (result.status.statusCode != ConnectionsStatusCodes.STATUS_OK) {
                 peers.remove(endpointId)
+                emitPeers()
             }
         }
         override fun onDisconnected(endpointId: String) {
             peers.remove(endpointId)
+            emitPeers()
         }
     }
 
@@ -63,6 +67,8 @@ class NearbyTransport(
     }
 
     override fun incoming(): Flow<Pair<Peer, ByteArray>> = incomingFlow.asSharedFlow()
+    override fun peers(): Flow<List<Peer>> = peersFlow.asSharedFlow()
+    override val peersSnapshot: List<Peer> get() = peers.values.toList()
 
     override suspend fun start(): Boolean {
         return try {
@@ -76,6 +82,7 @@ class NearbyTransport(
         try { client.stopDiscovery() } catch (_: Throwable) {}
         try { client.stopAllEndpoints() } catch (_: Throwable) {}
         peers.clear()
+        emitPeers()
     }
 
     override suspend fun send(to: Peer, bytes: ByteArray): Boolean {
@@ -106,5 +113,8 @@ class NearbyTransport(
         val opts = DiscoveryOptions.Builder().setStrategy(Strategy.P2P_STAR).build()
         client.startDiscovery(serviceId, endpointCb, opts)
     }
-}
 
+    private fun emitPeers() {
+        peersFlow.tryEmit(peers.values.toList())
+    }
+}

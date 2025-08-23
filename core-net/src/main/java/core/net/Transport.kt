@@ -13,10 +13,13 @@ interface Transport {
     // Emits raw payloads from remote peers. First byte should be a message type code.
     fun incoming(): Flow<Pair<Peer, ByteArray>>
 
+    // Emits current connected peers list; updates on join/disconnect.
+    fun peers(): Flow<List<Peer>>
+    val peersSnapshot: List<Peer>
+
     suspend fun start(): Boolean
     suspend fun stop()
 
     suspend fun send(to: Peer, bytes: ByteArray): Boolean
     suspend fun broadcast(bytes: ByteArray): Int
 }
-
