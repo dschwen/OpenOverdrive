@@ -87,32 +87,47 @@ class AndroidBleClient(private val context: Context) : BleClient {
     private fun resolveName(result: ScanResult): String? {
         val advertisedName = result.device?.name ?: result.scanRecord?.deviceName
         if (!advertisedName.isNullOrBlank()) return advertisedName
-        // Fallback to model name from manufacturer data if present
+        // Fallback to model name from manufacturer data
         val sr = result.scanRecord ?: return null
         val msd = sr.manufacturerSpecificData ?: return null
-        for (i in 0 until msd.size()) {
-            val data = msd.valueAt(i) ?: continue
-            if (data.size >= 8) {
-                try {
-                    val bb = java.nio.ByteBuffer.wrap(data).order(java.nio.ByteOrder.LITTLE_ENDIAN)
-                    bb.int // identifier
-                    val modelId = (bb.get().toInt() and 0xFF)
-                    // skip reserved
-                    bb.get()
-                    val model = when (modelId) {
-                        1 -> "Kourai"
-                        2 -> "Boson"
-                        3 -> "Rho"
-                        4 -> "Katal"
-                        8 -> "GroundShock"
-                        9 -> "Skull"
-                        else -> null
-                    }
-                    if (model != null) return model
-                } catch (_: Throwable) { /* ignore malformed records */ }
+        // Per PROTOCOL-REVERSE.md: companyId 61374, byte[1] is model ID
+        val COMPANY_ID = 61374
+        val preferred = msd.get(COMPANY_ID)
+        val modelId: Int? = when {
+            preferred != null && preferred.size >= 2 -> preferred[1].toInt() and 0xFF
+            else -> {
+                // Fallback: scan any MSD entry and try to interpret byte[1] as model id
+                var id: Int? = null
+                for (i in 0 until msd.size()) {
+                    val data = msd.valueAt(i) ?: continue
+                    if (data.size >= 2) { id = data[1].toInt() and 0xFF; break }
+                }
+                id
             }
         }
-        return null
+        val model = when (modelId) {
+            1 -> "Kourai"
+            2 -> "Boson"
+            3 -> "Rho"
+            4 -> "Katal"
+            5 -> "Hadion"
+            6 -> "Spektrix"
+            7 -> "Corax"
+            8 -> "GroundShock"
+            9 -> "Skull"
+            10 -> "Thermo"
+            11 -> "Nuke"
+            12 -> "Guardian"
+            14 -> "Bigbang"
+            15 -> "Freewheel"
+            16 -> "x52"
+            17 -> "x52 Ice"
+            18 -> "Mammoth"
+            19 -> "Dynamo"
+            20 -> "Nuke Phantom"
+            else -> null
+        }
+        return model
     }
 
     @SuppressLint("MissingPermission")

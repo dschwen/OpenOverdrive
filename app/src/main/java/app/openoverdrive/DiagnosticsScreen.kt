@@ -60,6 +60,7 @@ fun DiagnosticsScreen(
     var lastPos by remember { mutableStateOf<core.protocol.VehicleMessage.PositionUpdate?>(null) }
     var lastTrans by remember { mutableStateOf<core.protocol.VehicleMessage.TransitionUpdate?>(null) }
     var sdkEnabled by remember { mutableStateOf(false) }
+    var version by remember { mutableStateOf<Int?>(null) }
 
     LaunchedEffect(scanning, permissions.allPermissionsGranted) {
         if (!scanning || !permissions.allPermissionsGranted) return@LaunchedEffect
@@ -91,7 +92,7 @@ fun DiagnosticsScreen(
                         lastTrans = msg
                     }
                     is core.protocol.VehicleMessage.Version -> {
-                        // Optionally surface version in Diagnostics later
+                        version = msg.version
                     }
                     else -> { /* ignore */ }
                 }
@@ -148,6 +149,7 @@ fun DiagnosticsScreen(
                 Button(onClick = { scope.launch { notifEnabled = bleClient.enableNotifications() } }) { Text("Enable notifications") }
                 OutlinedButton(onClick = { scope.launch { lastWriteOk = bleClient.write(core.protocol.VehicleMsg.ping()) } }) { Text("Ping") }
                 OutlinedButton(onClick = { scope.launch { lastWriteOk = bleClient.write(core.protocol.VehicleMsg.batteryRequest()) } }) { Text("Battery req") }
+                OutlinedButton(onClick = { scope.launch { lastWriteOk = bleClient.write(core.protocol.VehicleMsg.versionRequest()) } }) { Text("Version req") }
                 Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                     Text("SDK mode")
                     androidx.compose.material3.Switch(
@@ -186,6 +188,7 @@ fun DiagnosticsScreen(
                 val detail = lastBatteryMv?.let { mv -> " (${mv}mV)" } ?: ""
                 Text("Battery parsed: ${pct}%$detail")
             }
+            version?.let { v -> Text("Firmware version: $v") }
             if (onCharger != null || charged != null || low != null) {
                 Text("Status: onCharger=${onCharger ?: "?"} charged=${charged ?: "?"} low=${low ?: "?"}")
             }
