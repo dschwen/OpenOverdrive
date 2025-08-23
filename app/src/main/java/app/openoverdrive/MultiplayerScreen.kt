@@ -51,19 +51,7 @@ fun MultiplayerScreen(
     val offsetByPeer = remember { mutableStateMapOf<String, Long>() }
     val sendTimes = remember { mutableStateMapOf<Int, Long>() }
     var didNavigateToDrive by remember { mutableStateOf(false) }
-    // Handle leaving the lobby: ensure BLE disconnect when going back to discovery
-    fun handleBack() {
-        // Disconnect the currently connected car (if any)
-        scope.launch {
-            try { BleProvider.client.disconnect() } catch (_: Throwable) {}
-        }
-        // Stop Nearby session if running (only matters when leaving lobby)
-        stopNearby()
-        onBack()
-    }
-
-    // Intercept system back to apply the same cleanup
-    BackHandler(enabled = true) { handleBack() }
+    var leavingToDrive by remember { mutableStateOf(false) }
 
     // Incoming listener
     LaunchedEffect(transport) {
@@ -114,7 +102,7 @@ fun MultiplayerScreen(
                             core.net.NetSession.setMatchStartAt(localGoAt)
                             core.net.NetSession.setTargetLaps(targetLaps)
                             logs.add("<- Start Match: ${countdownSec}s, localGoAt=${localGoAt}")
-                            if (!didNavigateToDrive) { didNavigateToDrive = true; onStartDrive(selectedAddress, selectedName, true) }
+                            if (!didNavigateToDrive) { didNavigateToDrive = true; leavingToDrive = true; onStartDrive(selectedAddress, selectedName, true) }
                         } else if (msg.type == 2) {
                             // Cancel countdown
                             core.net.NetSession.setMatchStartAt(null)
@@ -189,6 +177,31 @@ fun MultiplayerScreen(
         }
     }
 
+    // Handle leaving the lobby: ensure BLE disconnect when going back to discovery
+    fun handleBack() {
+        // Disconnect the currently connected car (if any)
+        scope.launch {
+            try { BleProvider.client.disconnect() } catch (_: Throwable) {}
+        }
+        // Stop Nearby session if running (only matters when leaving lobby)
+        stopNearby()
+        onBack()
+    }
+
+    // Intercept system back to apply the same cleanup
+    BackHandler(enabled = true) { handleBack() }
+
+    // Safety net: on dispose, if we are leaving via back/pop (not navigating forward to Drive),
+    // disconnect BLE and stop Nearby to free the car.
+    DisposableEffect(Unit) {
+        onDispose {
+            if (!leavingToDrive) {
+                try { BleProvider.client.disconnect() } catch (_: Throwable) {}
+                stopNearby()
+            }
+        }
+    }
+
     // Countdown state for host/client UI
     val matchStartAt by core.net.NetSession.matchStartAtMs.collectAsState(initial = null)
     var nowMs by remember { mutableStateOf(System.currentTimeMillis()) }
@@ -221,7 +234,7 @@ fun MultiplayerScreen(
                 // Pre-Android 12: Nearby requires location permission
                 rememberMultiplePermissionsState(listOf(android.Manifest.permission.ACCESS_FINE_LOCATION))
             }
-            if (permissions != null && !permissions.allPermissionsGranted) {
+            if (!permissions.allPermissionsGranted) {
                 ElevatedCard(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(12.dp)) {
                         Text("Bluetooth permissions required for multiplayer")
@@ -251,7 +264,6 @@ fun MultiplayerScreen(
                 Text("Laps:")
                 listOf(1,3,5,10).forEach { n ->
                     val sel = n == laps
-                    val style = if (sel) ButtonDefaults.buttonColors() else ButtonDefaults.outlinedButtonColors()
                     if (sel) Button(onClick = { laps = n }) { Text("$n") } else OutlinedButton(onClick = { laps = n }) { Text("$n") }
                 }
             }
@@ -280,7 +292,7 @@ fun MultiplayerScreen(
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Button(onClick = { onStartDrive(selectedAddress, selectedName, false) }, enabled = selectedAddress != null) { Text("Single Player") }
+                Button(onClick = { leavingToDrive = true; onStartDrive(selectedAddress, selectedName, false) }, enabled = selectedAddress != null) { Text("Single Player") }
                 OutlinedButton(onClick = { handleBack() }) { Text("Back") }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -315,7 +327,7 @@ fun MultiplayerScreen(
                             logs.add("-> Start Match sent to $count peers")
                             core.net.NetSession.setMatchStartAt(hostGoAt)
                             core.net.NetSession.setTargetLaps(laps)
-                            if (!didNavigateToDrive) { didNavigateToDrive = true; onStartDrive(selectedAddress, selectedName, true) }
+                            if (!didNavigateToDrive) { didNavigateToDrive = true; leavingToDrive = true; onStartDrive(selectedAddress, selectedName, true) }
                         }
                     },
                     enabled = running && !preGo,

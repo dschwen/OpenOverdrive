@@ -36,6 +36,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.withTimeoutOrNull
 import core.protocol.VehicleMsg
 import core.protocol.VehicleMsgParser
@@ -90,14 +91,8 @@ fun DiscoveryScreen(
         repeat(2) { _ ->
             runCatching { ble.connect(address) }
             val ok = withTimeoutOrNull(5000) {
-                while (true) {
-                    when (ble.connectionState.first()) {
-                        is core.ble.ConnectionState.Connected -> return@withTimeoutOrNull true
-                        is core.ble.ConnectionState.Disconnected -> return@withTimeoutOrNull false
-                        else -> {}
-                    }
-                }
-            } ?: false
+                ble.connectionState.first { it is core.ble.ConnectionState.Connected }
+            } != null
             if (ok) { connected = true; return@repeat }
             // small pause before retry
             kotlinx.coroutines.delay(300)

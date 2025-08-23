@@ -15,6 +15,7 @@ android {
 
 dependencies {
     implementation(project(":core-ble"))
+    implementation(project(":core-protocol"))
     implementation(project(":data"))
     implementation(platform("androidx.compose:compose-bom:2024.09.01"))
     implementation("androidx.compose.ui:ui")

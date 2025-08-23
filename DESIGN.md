@@ -142,7 +142,7 @@ Lap timing improvements
 
 Navigation and connection
 - Discover tap performs BLE connect + initialization (notifications + SDK mode) and verifies by awaiting a response before navigating.
-- Single‑player Drive verifies connection on entry and proceeds; if not already connected, it will connect as a fallback.
+- Single‑player Drive does not initiate a new connection; it only performs handshake and verification if already connected from Discover.
 - Multiplayer: On Host Start, navigate all players to MultiPlayerDriveScreen and begin the countdown.
 
 Connection feedback

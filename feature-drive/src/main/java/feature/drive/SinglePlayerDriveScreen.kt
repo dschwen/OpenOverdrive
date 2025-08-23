@@ -51,13 +51,8 @@ fun SinglePlayerDriveScreen(
     var lowBattery by remember { mutableStateOf<Boolean?>(null) }
     var useV4Speed by remember { mutableStateOf(true) }
 
-    // Ensure we are connected on entry
+    // Observe connection; handshake runs when connected (connection is established in Discover screen)
     val connState by client.connectionState.collectAsState(initial = ConnectionState.Disconnected)
-    LaunchedEffect(address) {
-        if (connState is ConnectionState.Disconnected) {
-            runCatching { client.connect(address) }
-        }
-    }
 
     LaunchedEffect(address) {
         client.notifications().collectLatest { bytes ->
