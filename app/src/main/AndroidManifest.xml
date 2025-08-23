@@ -6,6 +6,13 @@
         android:name="android.permission.BLUETOOTH_SCAN"
         android:usesPermissionFlags="neverForLocation" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <!-- Required on Android 12+ for Nearby advertising (host role) -->
+    <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
+    <!-- Nearby Connections may use Wi‑Fi; library checks these permissions -->
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
+    <!-- Android 13+: Nearby Wi‑Fi device interaction without location -->
+    <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES" />
     <!-- Legacy Bluetooth permissions for Android <= 10/11 -->
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />

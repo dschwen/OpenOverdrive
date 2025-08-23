@@ -13,7 +13,6 @@ class HostService(private val transport: Transport) {
     fun start() {
         check(transport.role is Role.Host)
         job = scope.launch {
-            transport.start()
             transport.incoming().collect { (peer, bytes) ->
                 when (val msg = NetCodec.decode(bytes)) {
                     is NetMessage.Join -> { /* register peer */ }
@@ -40,7 +39,6 @@ class ClientService(private val transport: Transport) {
     fun start() {
         check(transport.role is Role.Client)
         job = scope.launch {
-            transport.start()
             transport.incoming().collect { (_peer, bytes) ->
                 when (val msg = NetCodec.decode(bytes)) {
                     is NetMessage.WorldState -> { /* apply world */ }
@@ -57,4 +55,3 @@ class ClientService(private val transport: Transport) {
         transport.stop()
     }
 }
-

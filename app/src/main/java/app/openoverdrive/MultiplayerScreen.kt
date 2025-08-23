@@ -12,8 +12,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import core.net.*
 import kotlinx.coroutines.launch
+import com.google.accompanist.permissions.ExperimentalPermissionsApi
+import com.google.accompanist.permissions.rememberMultiplePermissionsState
+import android.os.Build
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalPermissionsApi::class)
 @Composable
 fun MultiplayerScreen(onBack: () -> Unit) {
     val ctx = LocalContext.current
@@ -174,6 +177,33 @@ fun MultiplayerScreen(onBack: () -> Unit) {
 
     Scaffold(topBar = { TopAppBar(title = { Text("Multiplayer Lobby") }) }) { padding ->
         Column(Modifier.padding(padding).padding(16.dp).fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            // Runtime permissions for Nearby (Android 12+): request BLE advertise/scan/connect
+            val permissions = if (Build.VERSION.SDK_INT >= 31) {
+                val base = mutableListOf(
+                    android.Manifest.permission.BLUETOOTH_ADVERTISE,
+                    android.Manifest.permission.BLUETOOTH_SCAN,
+                    android.Manifest.permission.BLUETOOTH_CONNECT,
+                    // Some devices/Play Services still require location for Nearby discovery
+                    android.Manifest.permission.ACCESS_COARSE_LOCATION,
+                    android.Manifest.permission.ACCESS_FINE_LOCATION
+                )
+                if (Build.VERSION.SDK_INT >= 33) {
+                    base += android.Manifest.permission.NEARBY_WIFI_DEVICES
+                }
+                rememberMultiplePermissionsState(base)
+            } else {
+                // Pre-Android 12: Nearby requires location permission
+                rememberMultiplePermissionsState(listOf(android.Manifest.permission.ACCESS_FINE_LOCATION))
+            }
+            if (permissions != null && !permissions.allPermissionsGranted) {
+                ElevatedCard(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(12.dp)) {
+                        Text("Bluetooth permissions required for multiplayer")
+                        Spacer(Modifier.height(8.dp))
+                        Button(onClick = { permissions.launchMultiplePermissionRequest() }) { Text("Grant Permissions") }
+                    }
+                }
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(
                     value = name,
@@ -189,6 +219,11 @@ fun MultiplayerScreen(onBack: () -> Unit) {
                 }
             }
             Text("Status: $status")
+            // Nearby status line for quick diagnosis
+            val nearbyStatus by remember(transport) {
+                (transport as? NearbyTransport)?.status ?: kotlinx.coroutines.flow.MutableStateFlow("Idle")
+            }.collectAsState(initial = "Idle")
+            Text("Nearby: $nearbyStatus")
             if (!isHost) {
                 Text("Time offset (≈): ${offsetEstimateMs?.let { "$it ms" } ?: "?"}")
             }
@@ -208,7 +243,8 @@ fun MultiplayerScreen(onBack: () -> Unit) {
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                if (!running) Button(onClick = { startNearby(ctx) }) { Text("Start") } else Button(onClick = { stopNearby() }) { Text("Stop") }
+                val canStart = permissions.allPermissionsGranted
+                if (!running) Button(onClick = { startNearby(ctx) }, enabled = canStart) { Text("Start") } else Button(onClick = { stopNearby() }) { Text("Stop") }
                 OutlinedButton(onClick = onBack) { Text("Back") }
             }
             HorizontalDivider()

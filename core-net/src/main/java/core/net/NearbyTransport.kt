@@ -6,7 +6,9 @@ import com.google.android.gms.nearby.connection.*
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.StateFlow
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -25,6 +27,8 @@ class NearbyTransport(
     private val incomingFlow = MutableSharedFlow<Pair<Peer, ByteArray>>(extraBufferCapacity = 128, onBufferOverflow = BufferOverflow.DROP_OLDEST)
     private val peers = ConcurrentHashMap<String, Peer>() // endpointId -> Peer
     private val peersFlow = MutableSharedFlow<List<Peer>>(replay = 1, extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    private val _status = MutableStateFlow("Idle")
+    val status: StateFlow<String> = _status
 
     private val payloadCb = object : PayloadCallback() {
         override fun onPayloadReceived(endpointId: String, payload: Payload) {
@@ -41,27 +45,37 @@ class NearbyTransport(
     private val connLifecycle = object : ConnectionLifecycleCallback() {
         override fun onConnectionInitiated(endpointId: String, info: ConnectionInfo) {
             // Auto-accept; production can show a prompt
+            _status.value = "Conn initiated by ${info.endpointName}"
             client.acceptConnection(endpointId, payloadCb)
+                .addOnSuccessListener { _status.value = "Accepted connection from ${info.endpointName}" }
+                .addOnFailureListener { _status.value = "Accept failed: ${it.message}" }
             val p = Peer(id = endpointId, name = info.endpointName)
             peers[endpointId] = p
             emitPeers()
         }
         override fun onConnectionResult(endpointId: String, result: ConnectionResolution) {
             if (result.status.statusCode != ConnectionsStatusCodes.STATUS_OK) {
+                _status.value = "Conn failed (${result.status.statusCode})"
                 peers.remove(endpointId)
                 emitPeers()
+            } else {
+                _status.value = "Connected (${peers.size} peers)"
             }
         }
         override fun onDisconnected(endpointId: String) {
             peers.remove(endpointId)
             emitPeers()
+            _status.value = "Peer disconnected (${peers.size} peers)"
         }
     }
 
     private val endpointCb = object : EndpointDiscoveryCallback() {
         override fun onEndpointFound(endpointId: String, info: DiscoveredEndpointInfo) {
             // Client attempts to connect to host
+            _status.value = "Found ${info.endpointName}; requesting connection"
             client.requestConnection(localPeer.name ?: "peer", endpointId, connLifecycle)
+                .addOnSuccessListener { _status.value = "Request sent to ${info.endpointName}" }
+                .addOnFailureListener { _status.value = "Request failed: ${it.message}" }
         }
         override fun onEndpointLost(endpointId: String) { /* ignore */ }
     }
@@ -72,6 +86,10 @@ class NearbyTransport(
 
     override suspend fun start(): Boolean {
         return try {
+            // Ensure clean state before (re)starting
+            try { client.stopDiscovery() } catch (_: Throwable) {}
+            try { client.stopAdvertising() } catch (_: Throwable) {}
+            try { client.stopAllEndpoints() } catch (_: Throwable) {}
             if (role is Role.Host) startAdvertising() else startDiscovery()
             true
         } catch (_: Throwable) { false }
@@ -106,12 +124,22 @@ class NearbyTransport(
 
     private fun startAdvertising() {
         val opts = AdvertisingOptions.Builder().setStrategy(Strategy.P2P_STAR).build()
+        _status.value = "Starting advertising"
+        // Ensure discovery is not active
+        try { client.stopDiscovery() } catch (_: Throwable) {}
         client.startAdvertising(localPeer.name ?: "host", serviceId, connLifecycle, opts)
+            .addOnSuccessListener { _status.value = "Advertising" }
+            .addOnFailureListener { _status.value = "Advertise failed: ${it.message}" }
     }
 
     private fun startDiscovery() {
         val opts = DiscoveryOptions.Builder().setStrategy(Strategy.P2P_STAR).build()
+        _status.value = "Starting discovery"
+        // Ensure advertising is not active
+        try { client.stopAdvertising() } catch (_: Throwable) {}
         client.startDiscovery(serviceId, endpointCb, opts)
+            .addOnSuccessListener { _status.value = "Discovering" }
+            .addOnFailureListener { _status.value = "Discover failed: ${it.message}" }
     }
 
     private fun emitPeers() {
