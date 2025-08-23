@@ -19,6 +19,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Bolt
+import androidx.compose.material.icons.outlined.BatteryFull
+import androidx.compose.material.icons.outlined.BatteryAlert
+ 
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -41,12 +47,16 @@ fun DriveScreen(
     var initSent by remember { mutableStateOf(false) }
     var lastLapTimeMs by remember { mutableStateOf<Long?>(null) }
     var laneTag by remember { mutableStateOf(0) }
+    var onCharger by remember { mutableStateOf<Boolean?>(null) }
+    var chargedBattery by remember { mutableStateOf<Boolean?>(null) }
+    var lowBattery by remember { mutableStateOf<Boolean?>(null) }
 
     var wasOnMarker by remember { mutableStateOf(false) }
     LaunchedEffect(address) {
         client.notifications().collectLatest { bytes ->
             when (val msg = VehicleMsgParser.parse(bytes)) {
-                is VehicleMessage.BatteryLevel -> battery = msg.percent
+                is VehicleMessage.BatteryLevel -> { battery = msg.percent }
+                is VehicleMessage.CarStatus -> { onCharger = msg.onCharger; chargedBattery = msg.chargedBattery; lowBattery = msg.lowBattery }
                 is VehicleMessage.PositionUpdate -> {
                     val rp = msg.roadPieceId
                     lastPieceId = rp
@@ -118,8 +128,31 @@ fun DriveScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("Battery: ${battery?.let { "$it%" } ?: "?"}")
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("Battery: ${battery?.let { "$it%" } ?: "?"}")
+                    if (onCharger == true) {
+                        Icon(
+                            imageVector = Icons.Outlined.Bolt,
+                            contentDescription = "Charging",
+                            tint = androidx.compose.ui.graphics.Color(0xFFFFC107)
+                        )
+                    }
+                    if (chargedBattery == true) {
+                        Icon(
+                            imageVector = Icons.Outlined.BatteryFull,
+                            contentDescription = "Charged",
+                            tint = androidx.compose.ui.graphics.Color(0xFF4CAF50)
+                        )
+                    }
+                    if (lowBattery == true) {
+                        Icon(
+                            imageVector = Icons.Outlined.BatteryAlert,
+                            contentDescription = "Low battery",
+                            tint = androidx.compose.ui.graphics.Color(0xFFD32F2F)
+                        )
+                    }
+                }
                 val lapText = lastLapTimeMs?.let { ms ->
                     val sec = ms / 1000
                     val tenths = (ms % 1000) / 100

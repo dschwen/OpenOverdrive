@@ -54,6 +54,11 @@ fun DiagnosticsScreen(
     var notifEnabled by remember { mutableStateOf<Boolean?>(null) }
     var lastBatteryMv by remember { mutableStateOf<Int?>(null) }
     var lastBatteryPct by remember { mutableStateOf<Int?>(null) }
+    var onCharger by remember { mutableStateOf<Boolean?>(null) }
+    var charged by remember { mutableStateOf<Boolean?>(null) }
+    var low by remember { mutableStateOf<Boolean?>(null) }
+    var lastPos by remember { mutableStateOf<core.protocol.VehicleMessage.PositionUpdate?>(null) }
+    var lastTrans by remember { mutableStateOf<core.protocol.VehicleMessage.TransitionUpdate?>(null) }
     var sdkEnabled by remember { mutableStateOf(false) }
 
     LaunchedEffect(scanning, permissions.allPermissionsGranted) {
@@ -67,11 +72,28 @@ fun DiagnosticsScreen(
             lastNotif = bytes.take(16).joinToString(" ") { b -> "%02X".format(b) }
             // Try to parse battery packets for visibility
             core.protocol.VehicleMsgParser.parse(bytes)?.let { msg ->
-                if (msg is core.protocol.VehicleMessage.BatteryLevel) {
-                    val raw = msg.raw
-                    val mv = if (raw in 2500..5000) raw else null
-                    lastBatteryMv = mv
-                    lastBatteryPct = msg.percent
+                when (msg) {
+                    is core.protocol.VehicleMessage.BatteryLevel -> {
+                        val raw = msg.raw
+                        val mv = if (raw in 2500..5000) raw else null
+                        lastBatteryMv = mv
+                        lastBatteryPct = msg.percent
+                    }
+                    is core.protocol.VehicleMessage.CarStatus -> {
+                        onCharger = msg.onCharger
+                        charged = msg.chargedBattery
+                        low = msg.lowBattery
+                    }
+                    is core.protocol.VehicleMessage.PositionUpdate -> {
+                        lastPos = msg
+                    }
+                    is core.protocol.VehicleMessage.TransitionUpdate -> {
+                        lastTrans = msg
+                    }
+                    is core.protocol.VehicleMessage.Version -> {
+                        // Optionally surface version in Diagnostics later
+                    }
+                    else -> { /* ignore */ }
                 }
             }
         }
@@ -163,6 +185,24 @@ fun DiagnosticsScreen(
             lastBatteryPct?.let { pct ->
                 val detail = lastBatteryMv?.let { mv -> " (${mv}mV)" } ?: ""
                 Text("Battery parsed: ${pct}%$detail")
+            }
+            if (onCharger != null || charged != null || low != null) {
+                Text("Status: onCharger=${onCharger ?: "?"} charged=${charged ?: "?"} low=${low ?: "?"}")
+            }
+            lastPos?.let { p ->
+                val flagsStr = p.parsingFlags?.let { f -> "0x%02X".format(f) } ?: "?"
+                Text(
+                    "Pos: loc=${p.locationId} piece=${p.roadPieceId} off=${String.format("%.1f", p.offsetFromCenter)}mm " +
+                        "spd=${p.speedMmPerSec} flags=${flagsStr} recvLC=${p.lastRecvdLaneChangeCmdId ?: "?"} " +
+                        "execLC=${p.lastExecutedLaneChangeCmdId ?: "?"} lcSp=${p.lastDesiredLaneChangeSpeedMmps ?: "?"} desSp=${p.lastDesiredSpeedMmps ?: "?"}"
+                )
+            }
+            lastTrans?.let { t ->
+                Text(
+                    "Trans: piece=${t.roadPieceIdx} prev=${t.roadPieceIdxPrev} off=${t.offsetFromCenter?.let { o -> String.format("%.1f", o) } ?: "?"}mm " +
+                        "drift=${t.avgFollowLineDrift ?: "?"} laneAct=${t.hadLaneChangeActivity ?: "?"} " +
+                        "L=${t.leftWheelDistanceCm ?: "?"}cm R=${t.rightWheelDistanceCm ?: "?"}cm up=${t.uphillCounter ?: "?"} down=${t.downhillCounter ?: "?"}"
+                )
             }
 
             Spacer(Modifier.height(12.dp))

@@ -22,11 +22,29 @@ object MsgId {
     const val V2C_OFFSET_UPDATE: Byte = 0x2D
     const val C2V_TURN: Byte = 0x32
     const val C2V_LIGHTS_PATTERN: Byte = 0x33
+    const val V2C_STATUS: Byte = 0x3F
     const val C2V_SET_CONFIG: Byte = 0x45
     const val C2V_SDK_MODE: Byte = 0x90.toByte()
 }
 
 object SdkFlags { const val OVERRIDE_LOCALIZATION: Byte = 0x01 }
+
+object LightChannel {
+    const val RED: Byte = 0
+    const val TAIL: Byte = 1
+    const val BLUE: Byte = 2
+    const val GREEN: Byte = 3
+    const val FRONTL: Byte = 4
+    const val FRONTR: Byte = 5
+}
+
+object LightEffect {
+    const val STEADY: Byte = 0
+    const val FADE: Byte = 1
+    const val THROB: Byte = 2
+    const val FLASH: Byte = 3
+    const val RANDOM: Byte = 4
+}
 
 /** Message builders (little-endian), matching the C SDK layout. */
 object VehicleMsg {
@@ -81,6 +99,40 @@ object VehicleMsg {
     fun disconnect(): ByteArray = simple(MsgId.C2V_DISCONNECT)
     fun cancelLane(): ByteArray = simple(MsgId.C2V_CANCEL_LANE)
 
+    /**
+     * Build a lights pattern (0x33) packet.
+     * Each entry is (channel, effect, startStrength, endStrength, cyclesPer10Seconds).
+     * Channel values: see LightChannel; Effect: see LightEffect. Strength is 0..255.
+     */
+    fun setLightsPattern(vararg entries: ByteArray): ByteArray {
+        require(entries.isNotEmpty()) { "At least one light entry is required" }
+        require(entries.all { it.size == 5 }) { "Each entry must be exactly 5 bytes" }
+        val count = entries.size
+        val payloadSize = 1 /*id*/ + 1 /*count*/ + (count * 5)
+        val bb = bb(1 + payloadSize)
+        bb.put((payloadSize).toByte())
+        bb.put(MsgId.C2V_LIGHTS_PATTERN)
+        bb.put(count.toByte())
+        entries.forEach { bb.put(it) }
+        return bb.array()
+    }
+
+    /** Convenience: steady RGB for engine LEDs. Strengths 0..255. */
+    fun setEngineRgb(r: Int, g: Int, b: Int): ByteArray {
+        fun entry(channel: Byte, strength: Int): ByteArray = byteArrayOf(
+            channel,
+            LightEffect.STEADY,
+            strength.coerceIn(0, 255).toByte(),
+            0x00,
+            0x00
+        )
+        return setLightsPattern(
+            entry(LightChannel.RED, r),
+            entry(LightChannel.GREEN, g),
+            entry(LightChannel.BLUE, b)
+        )
+    }
+
     private fun simple(id: Byte): ByteArray {
         val bb = bb(1 + 1)
         bb.put(1)
@@ -106,9 +158,32 @@ sealed interface VehicleMessage {
         val roadPieceId: Int,
         val offsetFromCenter: Float,
         val speedMmPerSec: Int,
-        val clockwise: Boolean,
+        val parsingFlags: Int? = null,
+        val lastRecvdLaneChangeCmdId: Int? = null,
+        val lastExecutedLaneChangeCmdId: Int? = null,
+        val lastDesiredLaneChangeSpeedMmps: Int? = null,
+        val lastDesiredSpeedMmps: Int? = null,
     ) : VehicleMessage
-    data class TransitionUpdate(val roadPieceIdx: Int, val roadPieceIdxPrev: Int) : VehicleMessage
+    data class TransitionUpdate(
+        val roadPieceIdx: Int,
+        val roadPieceIdxPrev: Int,
+        val offsetFromCenter: Float? = null,
+        val lastRecvdLaneChangeCmdId: Int? = null,
+        val lastExecutedLaneChangeCmdId: Int? = null,
+        val lastDesiredLaneChangeSpeedMmps: Int? = null,
+        val avgFollowLineDrift: Int? = null,
+        val hadLaneChangeActivity: Int? = null,
+        val uphillCounter: Int? = null,
+        val downhillCounter: Int? = null,
+        val leftWheelDistanceCm: Int? = null,
+        val rightWheelDistanceCm: Int? = null,
+    ) : VehicleMessage
+    data class CarStatus(
+        val onTrack: Boolean,
+        val onCharger: Boolean,
+        val lowBattery: Boolean,
+        val chargedBattery: Boolean,
+    ) : VehicleMessage
 }
 
 object VehicleMsgParser {
@@ -128,31 +203,87 @@ object VehicleMsgParser {
                 VehicleMessage.Version(version)
             }
             MsgId.V2C_LOC_POS -> {
-                // Layout: uint8 locationId, uint8 piece, float offset_mm, uint16 speed_mmps, uint8 clockwise
-                if (size >= 9) {
+                // Layout per PROTOCOL-REVERSE.md:
+                // [2] locationId (u8), [3] pieceId (u8), [4..7] offset (float mm), [8..9] speed (u16),
+                // [10] parsingFlags (u8), [11] lastRecvLCId (u8), [12] lastExecLCId (u8),
+                // [13..14] lastDesiredLCSpeed (u16), [15..16] lastDesiredSpeed (i16)
+                if (bb.remaining() >= 1 + 1 + 4 + 2) {
                     val locationId = bb.get().toInt() and 0xFF
                     val roadPieceId = bb.get().toInt() and 0xFF
                     val offset = bb.float
                     val speed = bb.short.toInt() and 0xFFFF
-                    val clockwise = (bb.get().toInt() and 0xFF) != 0
-                    VehicleMessage.PositionUpdate(locationId, roadPieceId, offset, speed, clockwise)
+                    var flags: Int? = null
+                    var lastRecv: Int? = null
+                    var lastExec: Int? = null
+                    var lastLcSpeed: Int? = null
+                    var lastDesiredSpeed: Int? = null
+                    if (bb.remaining() >= 1) flags = bb.get().toInt() and 0xFF
+                    if (bb.remaining() >= 1) lastRecv = bb.get().toInt() and 0xFF
+                    if (bb.remaining() >= 1) lastExec = bb.get().toInt() and 0xFF
+                    if (bb.remaining() >= 2) lastLcSpeed = bb.short.toInt() and 0xFFFF
+                    if (bb.remaining() >= 2) lastDesiredSpeed = bb.short.toInt()
+                    VehicleMessage.PositionUpdate(
+                        locationId,
+                        roadPieceId,
+                        offset,
+                        speed,
+                        flags,
+                        lastRecv,
+                        lastExec,
+                        lastLcSpeed,
+                        lastDesiredSpeed,
+                    )
                 } else null
             }
             MsgId.V2C_LOC_TRANS -> {
-                if (size >= 17) {
-                    val roadPieceIdx = bb.get().toInt() // int8
+                // Layout per PROTOCOL-REVERSE.md (subset decoded)
+                if (bb.remaining() >= 2) {
+                    val roadPieceIdx = bb.get().toInt()
                     val prev = bb.get().toInt()
-                    bb.float // offset
-                    bb.get() // last_recv_lane_change_id
-                    bb.get() // last_exec_lane_change_id
-                    bb.short // desired_lane_change_speed
-                    bb.get() // ave_follow_line_drift_pixels
-                    bb.get() // had_lane_change_activity
-                    bb.get() // uphill
-                    bb.get() // downhill
-                    bb.get() // left_wheel_dist
-                    bb.get() // right_wheel_dist
-                    VehicleMessage.TransitionUpdate(roadPieceIdx, prev)
+                    var offset: Float? = null
+                    var lastRecv: Int? = null
+                    var lastExec: Int? = null
+                    var lastLcSpeed: Int? = null
+                    var drift: Int? = null
+                    var laneAct: Int? = null
+                    var up: Int? = null
+                    var down: Int? = null
+                    var left: Int? = null
+                    var right: Int? = null
+                    if (bb.remaining() >= 4) offset = bb.float
+                    if (bb.remaining() >= 1) lastRecv = bb.get().toInt() and 0xFF
+                    if (bb.remaining() >= 1) lastExec = bb.get().toInt() and 0xFF
+                    if (bb.remaining() >= 2) lastLcSpeed = bb.short.toInt() and 0xFFFF
+                    if (bb.remaining() >= 1) drift = bb.get().toInt() and 0xFF
+                    if (bb.remaining() >= 1) laneAct = bb.get().toInt() and 0xFF
+                    if (bb.remaining() >= 1) up = bb.get().toInt() and 0xFF
+                    if (bb.remaining() >= 1) down = bb.get().toInt() and 0xFF
+                    if (bb.remaining() >= 1) left = bb.get().toInt() and 0xFF
+                    if (bb.remaining() >= 1) right = bb.get().toInt() and 0xFF
+                    VehicleMessage.TransitionUpdate(
+                        roadPieceIdx,
+                        prev,
+                        offset,
+                        lastRecv,
+                        lastExec,
+                        lastLcSpeed,
+                        drift,
+                        laneAct,
+                        up,
+                        down,
+                        left,
+                        right,
+                    )
+                } else null
+            }
+            MsgId.V2C_STATUS -> {
+                // Bytes (after id): onTrack, onCharger, lowBattery, chargedBattery (LSB of each)
+                if (size >= 5) {
+                    val onTrack = (bb.get().toInt() and 0x01) != 0
+                    val onCharger = (bb.get().toInt() and 0x01) != 0
+                    val low = (bb.get().toInt() and 0x01) != 0
+                    val charged = (bb.get().toInt() and 0x01) != 0
+                    VehicleMessage.CarStatus(onTrack, onCharger, low, charged)
                 } else null
             }
             else -> null

@@ -27,15 +27,23 @@ BLE Protocol (from drive-sdk)
   - 0x2C: C2V_SET_OFFSET_FROM_ROAD_CENTER (float offset_mm)
   - 0x25: C2V_CHANGE_LANE (uint16 h_speed, uint16 h_accel, float offset_mm, byte hop_intent, byte tag)
   - 0x26: C2V_CANCEL_LANE_CHANGE
-  - 0x1A/0x1B: Battery request/response (uint16 battery_level)
+  - 0x1A/0x1B: Battery request/response (uint16 battery_millivolts)
   - 0x16/0x17: Ping req/resp; 0x18/0x19 Version req/resp
   - 0x27/0x29/0x2A: Localization position/transition/intersection updates
+  - 0x33: Set lights pattern (RGB and channels)
   - 0x0D: Disconnect
+
+Protocol clarifications (from PROTOCOL-REVERSE.md)
+- SDK mode + speed (V4 compat): some firmware (≥12385) expects an extra trailing byte on Set Speed. Detect version via 0x19 and opt-in when needed.
+- Battery telemetry: 0x1B reports millivolts. Map 3.3–4.2 V → 0–100% for UI.
+- Car status flags: 0x3F exposes onTrack, onCharger, lowBattery, chargedBattery.
+- Localization details: 0x27 includes locationId, roadPieceId, lateral offset (mm), speed (mm/s) and parsing flags (reversed path). 0x29 adds transition data including wheel distances useful for finish-line heuristics.
+- Lights: 0x33 sets per-channel patterns for RED/GREEN/BLUE/FRONTL/FRONTR/TAIL with simple effects (steady, fade, throb, flash). A simple RGB mode uses three steady channels.
 
 Driving Semantics
 - Speed: Typical range 0–1500 mm/s (tunable). Use accel 25,000–30,000 mm/s² for responsive feel.
 - Lane change: Set current offset to 0, then issue change with hSpeed ~600 mm/s, hAccel ~8000 mm/s², offset ±44 mm (approx lane width). Car must be moving.
-- Battery: Convert raw (0..1023) to %; sample on connect and periodically (20–30s) during drive.
+- Battery: Parse 0x1B as millivolts; map 3.3–4.2 V → 0–100% for display. Sample on connect and periodically (20–30s). Parse 0x3F to show charging/charged states when available.
 - Laps: Heuristic based on localization updates. Allow user to “Mark Start/Finish” using current road_piece_id; increment lap on forward crossings of the marker. Track timestamps for lap time (future).
 
 Permissions & Lifecycle
@@ -74,6 +82,7 @@ UI/UX (feature modules)
   - Indicators: Battery, current speed, lap count and last lap time.
   - Read Battery button for manual refresh (auto polling planned).
   - Disconnect/back button; session foreground notification (future).
+  - Lights: apply profile color to engine RGB on connect; quick toggles for Front/Tail in Diagnostics.
 
 Lap timing improvements
 - Parse position (0x27) and transition (0x29) updates. Use parsing flags to detect reverse driving.
@@ -100,9 +109,10 @@ Testing Strategy
 Roadmap
 1) Replace FakeBleClient with AndroidBleClient: scanning, connect, GATT discovery, CCCD setup.
 2) Hook notifications into VehicleMsgParser; surface battery and localization to UI state.
-3) Add color association + persistence UI; enhance Discovery list.
-4) Add foreground service for driving; quick actions in notification.
-5) Expand localization parsing for richer telemetry and lap timing.
+3) Add lights control builder (0x33) and apply engine RGB from profile on connect; expose quick patterns in Diagnostics.
+4) Add color association + persistence UI; enhance Discovery list.
+5) Add foreground service for driving; quick actions in notification.
+6) Expand localization parsing (flags, wheel distances) and add Car Status (charging) indicator.
 
 Long‑Term Plan: Profiles, Telemetry, and Gameplay
 
@@ -114,8 +124,8 @@ Long‑Term Plan: Profiles, Telemetry, and Gameplay
 - Multi‑Car Tracking (World Model)
   - Build a live “world” where each connected car has a state: piece index, longitudinal progress s along the track, lateral offset, speed, heading (clockwise), and timestamp.
   - Use localization messages:
-    - 0x27 Location: (locationId, pieceId, offset_mm, speed_mmps, clockwise)
-    - 0x29 Transition: (pieceIdx, prevPieceIdx, ...)
+    - 0x27 Location: (locationId, pieceId, offset_mm, speed_mmps, parsingFlags, laneChange ids)
+    - 0x29 Transition: (pieceIdx, prevPieceIdx, offset_mm, drift, wheel distances, counters)
   - Maintain a per‑car Kalman or simple complementary filter to smooth speed/position between BLE updates.
   - Synchronize cars to a single timebase (monotonic clock) for fair interactions.
 
