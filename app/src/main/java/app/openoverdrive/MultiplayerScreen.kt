@@ -16,6 +16,8 @@ import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
 import android.os.Build
 import kotlinx.coroutines.flow.first
+import androidx.activity.compose.BackHandler
+import de.schwen.openoverdrive.BleProvider
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalPermissionsApi::class)
 @Composable
@@ -49,6 +51,19 @@ fun MultiplayerScreen(
     val offsetByPeer = remember { mutableStateMapOf<String, Long>() }
     val sendTimes = remember { mutableStateMapOf<Int, Long>() }
     var didNavigateToDrive by remember { mutableStateOf(false) }
+    // Handle leaving the lobby: ensure BLE disconnect when going back to discovery
+    fun handleBack() {
+        // Disconnect the currently connected car (if any)
+        scope.launch {
+            try { BleProvider.client.disconnect() } catch (_: Throwable) {}
+        }
+        // Stop Nearby session if running (only matters when leaving lobby)
+        stopNearby()
+        onBack()
+    }
+
+    // Intercept system back to apply the same cleanup
+    BackHandler(enabled = true) { handleBack() }
 
     // Incoming listener
     LaunchedEffect(transport) {
@@ -215,17 +230,22 @@ fun MultiplayerScreen(
                     }
                 }
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = {
-                        name = it
-                        prefs.edit().putString("player_name", it).apply()
-                    },
-                    label = { Text("Your name") }
-                )
-                Text(selectedName ?: selectedAddress ?: "")
-            }
+            // Player name input
+            OutlinedTextField(
+                value = name,
+                onValueChange = {
+                    name = it
+                    prefs.edit().putString("player_name", it).apply()
+                },
+                label = { Text("Your name") },
+                modifier = Modifier.fillMaxWidth()
+            )
+            // Connected vehicle name (below the input)
+            Text(
+                text = selectedName ?: selectedAddress ?: "",
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.fillMaxWidth()
+            )
             // Laps selector (host can change; value is sent with Start Match)
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("Laps:")
@@ -261,7 +281,7 @@ fun MultiplayerScreen(
             }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Button(onClick = { onStartDrive(selectedAddress, selectedName, false) }, enabled = selectedAddress != null) { Text("Single Player") }
-                OutlinedButton(onClick = onBack) { Text("Back") }
+                OutlinedButton(onClick = { handleBack() }) { Text("Back") }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 val canStart = permissions.allPermissionsGranted

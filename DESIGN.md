@@ -6,7 +6,7 @@ Overview
 
 Modules
 - app: Entry point, navigation between features (Compose Navigation).
-- core-ble: BLE abstractions (scan/connect, GATT, notifications, write queue). Provides a FakeBleClient for scaffolding; will be replaced by AndroidBleClient.
+- core-ble: BLE abstractions (scan/connect, GATT, notifications, write queue). AndroidBleClient implements the real stack; a FakeBleClient remains for UI scaffolding.
 - core-protocol: Message builders/parsers for Anki vehicle protocol (UUIDs, opcodes, payloads; ≤20B GATT payloads). Exposes VehicleMsg (builders) and VehicleMsgParser (decoders).
 - data: Persistence for car profiles and repository to merge scan results + stored info (colors, names, start line for lap detection).
 - feature-discovery: Compose UI for permissions + scanning + connecting + color association (future).
@@ -48,6 +48,7 @@ Driving Semantics
 
 Permissions & Lifecycle
 - Android 12+ (API 31+): BLUETOOTH_SCAN and BLUETOOTH_CONNECT at runtime; POST_NOTIFICATIONS for foreground session.
+- Nearby (multiplayer): also request BLUETOOTH_ADVERTISE; on Android 13+ (API 33+) NEARBY_WIFI_DEVICES; some devices still require coarse/fine location for discovery.
 - Pre-12: ACCESS_FINE_LOCATION required for BLE scan.
 - Use a foreground service during a drive session to improve link reliability; persistent notification with car name/address and quick disconnect.
 
@@ -95,6 +96,13 @@ Navigation Flow
   - Host Game → start Nearby host → Start Match → MultiPlayerDriveScreen(address, name)
   - Join Game → start Nearby client → wait for Host Start → MultiPlayerDriveScreen(address, name)
 
+Multiplayer Lobby
+- Player name is persisted (SharedPreferences) and reused across sessions.
+- Host/Join starts Nearby advertising or discovery; a concise status line shows current transport state for quick diagnosis.
+- Host can send Start Match with countdown and target laps; clients navigate to Drive on Start and lock controls until “Go!”. Host may cancel countdown before “Go!”.
+- Target laps options (1/3/5/10); value is included in the Start event payload and reflected in Drive HUD.
+- Back behavior: system back and UI Back both disconnect the current car (BLE) and stop Nearby before leaving the lobby.
+
 SinglePlayerDriveScreen
 - BLE: owns connect/handshake (auto‑connect on enter), writes and parses locally.
 - Controls: full set (speed slider; Accelerate/Decelerate; Left/Right; Brake).
@@ -108,6 +116,10 @@ MultiPlayerDriveScreen
 - Match config: receives target laps from Host Start event; shows lap progress.
 - Results: after finishing required laps, show ranking (place), total time, and best lap; keep updating as peers finish.
 - Session: “Quit Match” stops BLE (safely), clears match state (start time, target laps), stops Nearby transport, and returns to lobby.
+
+Additional Multiplayer Notes
+- Time sync: Host periodically sends TimeSync; clients estimate host offset to align the local “Go!” time.
+- Transport hygiene: stop discovery/advertising before toggling modes to avoid STATUS_ALREADY_ADVERTISING.
 
 Rationale & Implementation Notes
 - Separate composables (SinglePlayerDriveScreen vs MultiPlayerDriveScreen) reduce branching, make state ownership clearer (e.g., countdown, target laps, results), and simplify future features (e.g., items, penalties) without sprinkling multiplayer guards across single‑player.
@@ -128,13 +140,14 @@ Lap timing improvements
 - Parse position (0x27) and transition (0x29) updates. Use parsing flags to detect reverse driving.
 - Count laps only when crossing the marked piece in forward direction with a debounce; record last lap time for display.
 
-Snackbar and navigation
-- When auto-connect triggers, show a snackbar indicating the target car.
-- Current behavior navigates immediately after showing the snackbar; consider adding a small (e.g., 300–500 ms) delay before navigation so users can read the message more consistently. This is optional and deferred.
+Navigation and connection
+- Discover tap performs BLE connect + initialization (notifications + SDK mode) and verifies by awaiting a response before navigating.
+- Single‑player Drive verifies connection on entry and proceeds; if not already connected, it will connect as a fallback.
+- Multiplayer: On Host Start, navigate all players to MultiPlayerDriveScreen and begin the countdown.
 
-Auto-connect settings
-- Auto-connect only on Discovery screen (default on) to avoid hijacking other screens.
-- Optional short delay before navigating after the snackbar (default off).
+Connection feedback
+- Discovery shows a compact “Connecting…” indicator while establishing the link and handshake.
+- Drive shows ongoing connection state and battery once initialized.
 
 Reliability & Safety
 - Rate-limit commands (e.g., not more than 10 writes/sec), debounced speed slider writes.
@@ -281,7 +294,7 @@ Session Implementation Notes (2025-08)
 
 - Discovery & Naming
   - Simplified list (no known-cars, no auto-connect). Overflow menu anchored near tap; confirmation on forget.
-  - Device name defaults from advertised name; if absent, map manufacturer model_id to known names (Kourai, Boson, Rho, Katal, GroundShock, Skull).
+  - Device name: prefer manufacturer data (companyId 61374) to map model ids (e.g., Kourai, Boson, Rho, Katal, GroundShock, Skull); fall back to advertised name if it passes sanity checks to avoid garbled names.
   - Drive title uses displayName (passed via nav) instead of BT address.
 
 - Color & UI

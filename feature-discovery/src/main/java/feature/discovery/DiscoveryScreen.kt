@@ -33,6 +33,13 @@ import core.ble.BleDevice
 import data.CarRepository
 import data.CarProfile
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withTimeoutOrNull
+import core.protocol.VehicleMsg
+import core.protocol.VehicleMsgParser
+import core.protocol.VehicleMessage
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalPermissionsApi::class, ExperimentalMaterial3Api::class)
@@ -62,6 +69,7 @@ fun DiscoveryScreen(
     }
 
     var items by remember { mutableStateOf<List<Pair<BleDevice, CarProfile?>>>(emptyList()) }
+    var connectingAddress by remember { mutableStateOf<String?>(null) }
     var menuForAddress by remember { mutableStateOf<String?>(null) }
     var colorPickerFor by remember { mutableStateOf<Pair<String, CarProfile?>?>(null) }
     var nameEditorFor by remember { mutableStateOf<Pair<String, CarProfile?>?>(null) }
@@ -75,14 +83,69 @@ fun DiscoveryScreen(
     }
 
     // Removed auto-connect for a simpler, more explicit UX.
+    // Robust connect + handshake helper used on item tap.
+    suspend fun ensureConnectedAndInitialized(ble: BleClient, address: String): Boolean {
+        // Connect and wait for Connected state
+        var connected = false
+        repeat(2) { _ ->
+            runCatching { ble.connect(address) }
+            val ok = withTimeoutOrNull(5000) {
+                while (true) {
+                    when (ble.connectionState.first()) {
+                        is core.ble.ConnectionState.Connected -> return@withTimeoutOrNull true
+                        is core.ble.ConnectionState.Disconnected -> return@withTimeoutOrNull false
+                        else -> {}
+                    }
+                }
+            } ?: false
+            if (ok) { connected = true; return@repeat }
+            // small pause before retry
+            kotlinx.coroutines.delay(300)
+        }
+        if (!connected) return false
+
+        // Enable notifications (retry a few times)
+        var notified = false
+        repeat(3) {
+            try { if (ble.enableNotifications()) { notified = true; return@repeat } } catch (_: Throwable) {}
+            kotlinx.coroutines.delay(150)
+        }
+        // Even if not confirmed, continue with best-effort
+
+        // Try version (optional) and enter SDK mode
+        runCatching {
+            ble.write(VehicleMsg.versionRequest())
+            withTimeoutOrNull(1000) {
+                ble.notifications().map { VehicleMsgParser.parse(it) }.filterIsInstance<VehicleMessage.Version>().first()
+            }
+        }
+        repeat(3) { ble.write(VehicleMsg.sdkMode(true)); kotlinx.coroutines.delay(150) }
+
+        // Verify by requesting battery and awaiting response
+        return try {
+            ble.write(VehicleMsg.batteryRequest())
+            val ok = withTimeoutOrNull(1500) {
+                ble.notifications().map { VehicleMsgParser.parse(it) }.filterIsInstance<VehicleMessage.BatteryLevel>().first()
+            }
+            ok != null
+        } catch (_: Throwable) { false }
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(id = R.string.ood_discover_connect_title)) },
                 actions = {
-                    TextButton(onClick = onOpenDiagnostics) { Text(stringResource(id = R.string.ood_diagnostics)) }
-                    TextButton(onClick = onOpenMultiplayer) { Text("Multiplayer") }
+                    var menuOpen by remember { mutableStateOf(false) }
+                    IconButton(onClick = { menuOpen = true }) {
+                        Icon(Icons.Filled.MoreVert, contentDescription = "Menu")
+                    }
+                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(id = R.string.ood_diagnostics)) },
+                            onClick = { menuOpen = false; onOpenDiagnostics() }
+                        )
+                    }
                 }
             )
         },
@@ -102,16 +165,26 @@ fun DiscoveryScreen(
             Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Text(stringResource(id = R.string.ood_nearby_devices), style = MaterialTheme.typography.titleMedium)
             }
+            if (connectingAddress != null) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Connecting to $connectingAddress…")
+                }
+            }
             LazyColumn(Modifier.fillMaxWidth().weight(1f)) {
                 items(items) { (dev, profile) ->
                     DeviceRow(
                         device = dev,
                         profile = profile,
+                        connecting = (connectingAddress == dev.address),
                         menuExpanded = menuForAddress == dev.address,
                         onOpenMenu = { addr -> menuForAddress = addr },
                         onDismissMenu = { menuForAddress = null },
                         onConnect = {
                             scope.launch {
+                                if (connectingAddress != null) return@launch
+                                connectingAddress = dev.address
                                 val defaultName = profile?.displayName ?: dev.name ?: "Anki Vehicle"
                                 val updated = (profile ?: CarProfile(deviceAddress = dev.address)).copy(
                                     displayName = profile?.displayName ?: defaultName,
@@ -119,9 +192,14 @@ fun DiscoveryScreen(
                                     lastConnected = System.currentTimeMillis()
                                 )
                                 carRepo.upsertProfile(updated)
-                                client.connect(dev.address)
-                                // Navigate with name for Drive title
-                                onConnected(dev.address + "?name=" + java.net.URLEncoder.encode(defaultName, "UTF-8"))
+                                val ok = ensureConnectedAndInitialized(client, dev.address)
+                                connectingAddress = null
+                                if (ok) {
+                                    // Navigate with name for Drive title
+                                    onConnected(dev.address + "?name=" + java.net.URLEncoder.encode(defaultName, "UTF-8"))
+                                } else {
+                                    snackbarHostState.showSnackbar("Failed to connect. Please try again.")
+                                }
                             }
                         },
                         onPickColor = {
@@ -199,6 +277,7 @@ fun DiscoveryScreen(
 private fun DeviceRow(
     device: BleDevice,
     profile: CarProfile?,
+    connecting: Boolean,
     menuExpanded: Boolean,
     onConnect: () -> Unit,
     onOpenMenu: (String) -> Unit,
@@ -235,6 +314,9 @@ private fun DeviceRow(
             Box {
                 IconButton(onClick = { onOpenMenu(device.address) }) {
                     Icon(Icons.Filled.MoreVert, contentDescription = "More")
+                }
+                if (connecting) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                 }
                 DropdownMenu(expanded = menuExpanded, onDismissRequest = onDismissMenu) {
                     DropdownMenuItem(
