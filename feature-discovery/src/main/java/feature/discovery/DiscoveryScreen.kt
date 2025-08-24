@@ -24,6 +24,10 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.material.pullrefresh.pullRefresh
+import androidx.compose.material.pullrefresh.rememberPullRefreshState
+import androidx.compose.material.pullrefresh.PullRefreshIndicator
+import androidx.compose.material.ExperimentalMaterialApi
 import android.graphics.Color as AndroidColor
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
@@ -43,7 +47,7 @@ import core.protocol.VehicleMsgParser
 import core.protocol.VehicleMessage
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalPermissionsApi::class, ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalPermissionsApi::class, ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
 @Composable
 fun DiscoveryScreen(
     onConnected: (String) -> Unit,
@@ -77,7 +81,8 @@ fun DiscoveryScreen(
     var confirmForgetFor by remember { mutableStateOf<String?>(null) }
     // Profiles are stored for color/name, but we don't render a separate list here.
 
-    LaunchedEffect(permissions.allPermissionsGranted) {
+    var scanEpoch by remember { mutableStateOf(0) }
+    LaunchedEffect(permissions.allPermissionsGranted, scanEpoch) {
         if (!permissions.allPermissionsGranted) return@LaunchedEffect
         carRepo.visibleWithProfiles(client.scanForAnkiDevices())
             .collectLatest { list -> items = list }
@@ -140,13 +145,31 @@ fun DiscoveryScreen(
                             text = { Text(stringResource(id = R.string.ood_diagnostics)) },
                             onClick = { menuOpen = false; onOpenDiagnostics() }
                         )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(id = R.string.ood_refresh)) },
+                            onClick = { menuOpen = false; scanEpoch++ }
+                        )
                     }
                 }
             )
         },
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
     ) { padding ->
-        Column(Modifier.padding(padding).fillMaxSize()) {
+        var refreshing by remember { mutableStateOf(false) }
+        val pullRefreshState = rememberPullRefreshState(
+            refreshing = refreshing,
+            onRefresh = {
+                scope.launch {
+                    refreshing = true
+                    scanEpoch++
+                    // give the scan flow a moment to restart
+                    kotlinx.coroutines.delay(400)
+                    refreshing = false
+                }
+            }
+        )
+        Box(Modifier.padding(padding).fillMaxSize().pullRefresh(pullRefreshState)) {
+        Column(Modifier.fillMaxSize()) {
             if (!permissions.allPermissionsGranted) {
                 Text(
                     text = stringResource(id = R.string.ood_bt_permissions_required),
@@ -264,6 +287,8 @@ fun DiscoveryScreen(
                     dismissButton = { TextButton(onClick = { confirmForgetFor = null }) { Text(stringResource(id = R.string.ood_cancel)) } }
                 )
             }
+        }
+        PullRefreshIndicator(refreshing, pullRefreshState, Modifier.align(Alignment.TopCenter))
         }
     }
 }

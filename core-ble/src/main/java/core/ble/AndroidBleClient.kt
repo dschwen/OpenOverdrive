@@ -47,6 +47,7 @@ class AndroidBleClient(private val context: Context) : BleClient {
     private data class WriteReq(val data: ByteArray, val withResponse: Boolean, val cont: (Boolean) -> Unit)
 
     private val discoveredDevices = ConcurrentHashMap<String, BleDevice>()
+    private val lastSeenMs = ConcurrentHashMap<String, Long>()
 
     override fun scanForAnkiDevices(): Flow<List<BleDevice>> = callbackFlow {
         val adapter = adapter ?: run { trySend(emptyList()); awaitClose { }; return@callbackFlow }
@@ -59,6 +60,7 @@ class AndroidBleClient(private val context: Context) : BleClient {
                 val key = dev.address ?: return
                 val entry = BleDevice(address = key, name = resolveName(result), rssi = result.rssi)
                 discoveredDevices[key] = entry
+                lastSeenMs[key] = System.currentTimeMillis()
                 trySend(discoveredDevices.values.sortedBy { it.name ?: it.address }.toList())
             }
             override fun onBatchScanResults(results: MutableList<ScanResult>) {
@@ -68,6 +70,7 @@ class AndroidBleClient(private val context: Context) : BleClient {
                     val key = dev.address ?: continue
                     val entry = BleDevice(address = key, name = resolveName(r), rssi = r.rssi)
                     discoveredDevices[key] = entry
+                    lastSeenMs[key] = System.currentTimeMillis()
                     changed = true
                 }
                 if (changed) trySend(discoveredDevices.values.sortedBy { it.name ?: it.address }.toList())
@@ -78,9 +81,29 @@ class AndroidBleClient(private val context: Context) : BleClient {
             }
         }
         scanner?.startScan(listOf(filter), settings, callback)
+        // Periodically prune devices that haven't been seen recently (disconnected or out of range)
+        val pruneJob = launch {
+            while (true) {
+                kotlinx.coroutines.delay(2000)
+                val now = System.currentTimeMillis()
+                var changed = false
+                val it = lastSeenMs.entries.iterator()
+                while (it.hasNext()) {
+                    val (addr, ts) = it.next()
+                    if (now - ts > 6000) {
+                        it.remove()
+                        discoveredDevices.remove(addr)
+                        changed = true
+                    }
+                }
+                if (changed) trySend(discoveredDevices.values.sortedBy { it.name ?: it.address }.toList())
+            }
+        }
         awaitClose {
             try { scanner?.stopScan(callback) } catch (_: Throwable) {}
             discoveredDevices.clear()
+            lastSeenMs.clear()
+            try { pruneJob.cancel() } catch (_: Throwable) {}
         }
     }
 

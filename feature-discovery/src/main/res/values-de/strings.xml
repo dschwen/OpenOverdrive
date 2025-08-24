@@ -21,4 +21,5 @@
     <string name="ood_value">Helligkeit</string>
     <string name="ood_use">Übernehmen</string>
     <string name="ood_close">Schließen</string>
+    <string name="ood_refresh">Aktualisieren</string>
 </resources>

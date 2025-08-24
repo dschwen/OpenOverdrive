@@ -180,13 +180,12 @@ fun MultiplayerScreen(
 
     // Handle leaving the lobby: ensure BLE disconnect when going back to discovery
     fun handleBack() {
-        // Disconnect the currently connected car (if any)
+        // Run cleanup then navigate back to ensure disconnect succeeds before disposal cancels coroutines.
         scope.launch {
             try { BleProvider.client.disconnect() } catch (_: Throwable) {}
+            stopNearby()
+            onBack()
         }
-        // Stop Nearby session if running (only matters when leaving lobby)
-        stopNearby()
-        onBack()
     }
 
     // Intercept system back to apply the same cleanup
@@ -197,7 +196,7 @@ fun MultiplayerScreen(
     DisposableEffect(Unit) {
         onDispose {
             if (!leavingToDrive) {
-                try { BleProvider.client.disconnect() } catch (_: Throwable) {}
+                scope.launch { try { BleProvider.client.disconnect() } catch (_: Throwable) {} }
                 stopNearby()
             }
         }
