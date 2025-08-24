@@ -6,9 +6,14 @@
     <string name="ood_left">Links</string>
     <string name="ood_right">Rechts</string>
     <string name="ood_brake">Bremsen</string>
+    <string name="ood_decelerate">Verlangsamen</string>
     <string name="ood_mark_start">Start markieren</string>
     <string name="ood_reset_laps">Runden zurücksetzen</string>
     <string name="ood_disconnect">Trennen</string>
     <string name="ood_quit_match">Rennen verlassen</string>
     <string name="ood_match_started">Rennen gestartet</string>
+    <string name="ood_back">Zurück</string>
+    <string name="ood_results">Ergebnisse</string>
+    <string name="ood_best_lap">beste %1$d.%2$ds</string>
+    <string name="ood_dnf">DNF (%1$d/%2$d)</string>
 </resources>

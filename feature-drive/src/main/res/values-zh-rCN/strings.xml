@@ -6,9 +6,14 @@
     <string name="ood_left">左</string>
     <string name="ood_right">右</string>
     <string name="ood_brake">刹车</string>
+    <string name="ood_decelerate">减速</string>
     <string name="ood_mark_start">标记起点</string>
     <string name="ood_reset_laps">重置圈数</string>
     <string name="ood_disconnect">断开连接</string>
     <string name="ood_quit_match">退出比赛</string>
     <string name="ood_match_started">比赛开始</string>
+    <string name="ood_back">返回</string>
+    <string name="ood_results">结果</string>
+    <string name="ood_best_lap">最佳 %1$d.%2$ds</string>
+    <string name="ood_dnf">DNF (%1$d/%2$d)</string>
 </resources>

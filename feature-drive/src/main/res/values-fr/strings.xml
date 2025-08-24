@@ -6,9 +6,14 @@
     <string name="ood_left">Gauche</string>
     <string name="ood_right">Droite</string>
     <string name="ood_brake">Freiner</string>
+    <string name="ood_decelerate">Ralentir</string>
     <string name="ood_mark_start">Marquer le départ</string>
     <string name="ood_reset_laps">Réinitialiser les tours</string>
     <string name="ood_disconnect">Déconnecter</string>
     <string name="ood_quit_match">Quitter la course</string>
     <string name="ood_match_started">Course démarrée</string>
+    <string name="ood_back">Retour</string>
+    <string name="ood_results">Résultats</string>
+    <string name="ood_best_lap">meilleur %1$d.%2$ds</string>
+    <string name="ood_dnf">DNF (%1$d/%2$d)</string>
 </resources>

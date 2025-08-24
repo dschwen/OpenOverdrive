@@ -76,13 +76,15 @@ Data & Persistence (data)
 UI/UX (feature modules)
 - Discovery:
   - Request runtime permissions; show explanatory rationale.
-  - List visible cars; show known cars with color chips (future); connect action.
+  - List visible cars; connect on tap with verified handshake (notifications + SDK mode + battery response) before navigating.
+  - Pull‑to‑refresh (swipe down) restarts scanning; menu also has Refresh.
+  - Auto‑prune: devices not seen in ~6s are removed (e.g., when another player connects and the car stops advertising).
   - Allow color selection and forget from list item menu (future).
 - Drive (Single‑Player):
   - Speed slider; accelerate/brake buttons; lane left/right buttons.
   - Indicators: Battery, current speed, lap count and last lap time.
   - Read Battery button for manual refresh (auto polling planned).
-  - Disconnect/back button; session foreground notification (future).
+  - Back button (does not disconnect; returns to Lobby). Session foreground notification (future).
   - Lights: apply profile color to engine RGB on connect; quick toggles for Front/Tail in Diagnostics.
 
 Single vs Multiplayer Drive — UX Split
@@ -101,13 +103,13 @@ Multiplayer Lobby
 - Host/Join starts Nearby advertising or discovery; a concise status line shows current transport state for quick diagnosis.
 - Host can send Start Match with countdown and target laps; clients navigate to Drive on Start and lock controls until “Go!”. Host may cancel countdown before “Go!”.
 - Target laps options (1/3/5/10); value is included in the Start event payload and reflected in Drive HUD.
-- Back behavior: system back and UI Back both disconnect the current car (BLE) and stop Nearby before leaving the lobby.
+- Back behavior: system back and UI Back both disconnect the current car (BLE) and stop Nearby before leaving the Lobby for Discover; navigating into Drive keeps the BLE connection.
 
 SinglePlayerDriveScreen
-- BLE: owns connect/handshake (auto‑connect on enter), writes and parses locally.
+- BLE: does not initiate a new connection; assumes connection from Discover and runs handshake when connected; writes and parses locally.
 - Controls: full set (speed slider; Accelerate/Decelerate; Left/Right; Brake).
 - Laps: manual “Mark Start/Reset” button; lap timing uses on‑device heuristics; no countdown lock.
-- Session: “Disconnect” stops BLE and returns; no network state.
+- Session: “Back” returns to Lobby without disconnecting; no network state.
 
 MultiPlayerDriveScreen
 - BLE: same local BLE control as single‑player; additionally publishes telemetry (position/speed) best‑effort to host.
@@ -115,7 +117,7 @@ MultiPlayerDriveScreen
 - Start marker: automatically captured at or immediately after “Go!” when the first piece is crossed (no Mark Start button).
 - Match config: receives target laps from Host Start event; shows lap progress.
 - Results: after finishing required laps, show ranking (place), total time, and best lap; keep updating as peers finish.
-- Session: “Quit Match” stops BLE (safely), clears match state (start time, target laps), stops Nearby transport, and returns to lobby.
+- Session: “Quit Match” clears match state (start time, target laps), stops Nearby transport, and returns to Lobby; BLE connection remains until the user leaves the Lobby.
 
 Additional Multiplayer Notes
 - Time sync: Host periodically sends TimeSync; clients estimate host offset to align the local “Go!” time.
@@ -133,8 +135,8 @@ Rationale & Implementation Notes
 - Host may optionally echo results as a final summary event for clients that finish late or disconnect/reconnect.
 
 Visual Differences Summary
-- Single‑player: shows “Mark Start/Reset” and “Disconnect”.
-- Multiplayer: hides Mark Start; changes “Disconnect” to “Quit Match”; shows target laps and a results list when finished.
+- Single‑player: shows “Mark Start/Reset” and “Back” (no disconnect).
+- Multiplayer: hides Mark Start; uses “Quit Match” (no disconnect) and shows target laps and results when finished.
 
 Lap timing improvements
 - Parse position (0x27) and transition (0x29) updates. Use parsing flags to detect reverse driving.
@@ -146,7 +148,7 @@ Navigation and connection
 - Multiplayer: On Host Start, navigate all players to MultiPlayerDriveScreen and begin the countdown.
 
 Connection feedback
-- Discovery shows a compact “Connecting…” indicator while establishing the link and handshake.
+- Discovery shows a compact “Connecting…” indicator while establishing the link and handshake; pull‑to‑refresh indicator on swipe.
 - Drive shows ongoing connection state and battery once initialized.
 
 Reliability & Safety

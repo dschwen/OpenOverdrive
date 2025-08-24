@@ -88,9 +88,8 @@ fun SinglePlayerDriveScreen(
             is ConnectionState.Connected -> {
                 if (!initSent) {
                     initSent = true
-                    var notified = false
                     repeat(3) {
-                        try { if (client.enableNotifications()) { notified = true; return@repeat } } catch (_: Throwable) {}
+                        try { if (client.enableNotifications()) { return@repeat } } catch (_: Throwable) {}
                         delay(150)
                     }
                     delay(150)
@@ -242,12 +241,12 @@ fun SinglePlayerDriveScreen(
                         scope.launch {
                             runCatching { client.write(VehicleMsg.setSpeed(0, 30000, 1)) }
                             delay(150)
-                            client.disconnect()
+                            // Do not disconnect here; back to lobby retains connection
                             onBack()
                         }
                     },
                     modifier = Modifier.weight(1f).height(48.dp)
-                ) { Text(stringResource(id = R.string.ood_disconnect), maxLines = 1) }
+                ) { Text(stringResource(id = R.string.ood_back), maxLines = 1) }
             }
         }
     }

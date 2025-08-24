@@ -124,12 +124,12 @@ fun MultiPlayerDriveScreen(
                     val marker = startPieceId
                     val onMarker = (marker != null && rp == marker)
                     if (onMarker && !wasOnMarker) {
-                        val now = System.currentTimeMillis()
+                        val nowTs = System.currentTimeMillis()
                         // Require movement to avoid counting when stationary
-                        if (now - lastLapTs > 3000 && msg.speedMmPerSec > 100) {
+                        if (nowTs - lastLapTs > 3000 && msg.speedMmPerSec > 100) {
                             laps += 1
-                            lastLapTimeMs = if (lastLapTs == 0L) null else now - lastLapTs
-                            lastLapTs = now
+                            lastLapTimeMs = if (lastLapTs == 0L) null else nowTs - lastLapTs
+                            lastLapTs = nowTs
                             // Update local racer stats and broadcast
                             val r = racers.getOrPut("local") { Racer(name = displayName ?: localPeerName) }
                             r.laps = laps
@@ -138,18 +138,18 @@ fun MultiPlayerDriveScreen(
                                 val bb = java.nio.ByteBuffer.allocate(1 + 8 + 8).order(java.nio.ByteOrder.LITTLE_ENDIAN)
                                 bb.put(laps.toByte())
                                 bb.putLong(lastLapTimeMs ?: 0L)
-                                bb.putLong((matchStartAt?.let { now - it } ?: 0L))
+                                bb.putLong((matchStartAt?.let { nowTs - it } ?: 0L))
                                 val evt = NetCodec.encode(NetMessage.Event(type = 3, payload = bb.array()))
                                 runCatching { tr.broadcast(evt) }
                             }
                             targetLaps?.let { tl ->
                                 if (laps >= tl && finishedAtMs == null) {
-                                    finishedAtMs = now
-                                    r.finishedAt = now
+                                    finishedAtMs = nowTs
+                                    r.finishedAt = nowTs
                                     netTransport?.let { tr ->
                                         val bb = java.nio.ByteBuffer.allocate(1 + 8).order(java.nio.ByteOrder.LITTLE_ENDIAN)
                                         bb.put(laps.toByte())
-                                        bb.putLong((matchStartAt?.let { now - it } ?: 0L))
+                                        bb.putLong((matchStartAt?.let { nowTs - it } ?: 0L))
                                         val evt = NetCodec.encode(NetMessage.Event(type = 4, payload = bb.array()))
                                         runCatching { tr.broadcast(evt) }
                                     }
@@ -186,11 +186,8 @@ fun MultiPlayerDriveScreen(
                 if (!initSent) {
                     initSent = true
                     // Robust handshake: ensure notifications, then set SDK mode with retries
-                    var notified = false
                     repeat(3) {
-                        try {
-                            if (client.enableNotifications()) { notified = true; return@repeat }
-                        } catch (_: Throwable) {}
+                        try { if (client.enableNotifications()) { return@repeat } } catch (_: Throwable) {}
                         delay(150)
                     }
                     // Even if notifications didn't report success, proceed but be conservative with timing
@@ -224,7 +221,7 @@ fun MultiPlayerDriveScreen(
                             val bb = java.nio.ByteBuffer.wrap(m.payload).order(java.nio.ByteOrder.LITTLE_ENDIAN)
                             val lp = (bb.get().toInt() and 0xFF)
                             val lapMs = bb.long
-                            val elapsed = bb.long
+                            val elapsedMs = bb.long
                             val r = racers.getOrPut(peer.id) { Racer(name = peer.name) }
                             r.laps = lp
                             if (lapMs > 0) r.bestLapMs = listOfNotNull(r.bestLapMs, lapMs).minOrNull()
@@ -232,10 +229,10 @@ fun MultiPlayerDriveScreen(
                         4 -> {
                             val bb = java.nio.ByteBuffer.wrap(m.payload).order(java.nio.ByteOrder.LITTLE_ENDIAN)
                             val lp = (bb.get().toInt() and 0xFF)
-                            val elapsed = bb.long
+                            val elapsedMs = bb.long
                             val r = racers.getOrPut(peer.id) { Racer(name = peer.name) }
                             r.laps = lp
-                            r.finishedAt = (matchStartAt?.let { it + elapsed } ?: System.currentTimeMillis())
+                            r.finishedAt = (matchStartAt?.let { it + elapsedMs } ?: System.currentTimeMillis())
                         }
                     }
                     else -> {}
@@ -389,7 +386,7 @@ fun MultiPlayerDriveScreen(
                 colors = ButtonDefaults.buttonColors(containerColor = orange),
                 modifier = Modifier.fillMaxWidth().height(64.dp),
                 enabled = controlsEnabled
-            ) { Text("Decelerate", color = textOnColor) }
+            ) { Text(stringResource(id = R.string.ood_decelerate), color = textOnColor) }
 
             // Brake (full width)
             Button(
@@ -432,15 +429,20 @@ fun MultiPlayerDriveScreen(
             }
 
             // Race results overlay when finished
-            if (targetLaps != null && finishedAtMs != null) {
+            val tl = targetLaps
+            if (tl != null && finishedAtMs != null) {
                 val sorted = racers.entries.sortedWith(compareBy({ it.value.finishedAt == null }, { it.value.finishedAt ?: Long.MAX_VALUE }))
-                Text("Results", style = MaterialTheme.typography.titleMedium)
+                Text(stringResource(id = R.string.ood_results), style = MaterialTheme.typography.titleMedium)
                 sorted.forEachIndexed { idx, e ->
-                    val place = arrayOf("1st","2nd","3rd","4th","5th").getOrElse(idx) { "${idx+1}." }
+                    val place = "${idx + 1}."
                     val name = e.value.name ?: e.key
                     val total = e.value.finishedAt?.let { fa -> matchStartAt?.let { ms -> fa - ms } }
-                    val totalStr = total?.let { ms -> "${ms/1000}.${(ms%1000)/100}s" } ?: "DNF (${e.value.laps}/${targetLaps})"
-                    val best = e.value.bestLapMs?.let { ms -> "best ${ms/1000}.${(ms%1000)/100}s" } ?: ""
+                    val totalStr = total?.let { ms -> "${ms/1000}.${(ms%1000)/100}s" } ?: stringResource(id = R.string.ood_dnf, e.value.laps, tl)
+                    val best = e.value.bestLapMs?.let { ms ->
+                        val sec = (ms / 1000).toInt()
+                        val tenths = ((ms % 1000) / 100).toInt()
+                        stringResource(id = R.string.ood_best_lap, sec, tenths)
+                    } ?: ""
                     Text("$place  $name  $totalStr  $best")
                 }
             }
@@ -455,7 +457,7 @@ fun MultiPlayerDriveScreen(
                         scope.launch {
                             runCatching { client.write(VehicleMsg.setSpeed(0, 30000, 1)) }
                             delay(150)
-                            client.disconnect()
+                            // Do not disconnect here; return to lobby and let lobby own disconnect on back to Discover
                             // Leave multiplayer if active
                             NetSession.setMatchStartAt(null)
                             NetSession.setTargetLaps(null)
