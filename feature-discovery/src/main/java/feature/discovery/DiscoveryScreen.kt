@@ -53,8 +53,7 @@ fun DiscoveryScreen(
     onConnected: (String) -> Unit,
     bleClient: BleClient? = null,
     carRepositoryProvider: (android.content.Context, BleClient) -> CarRepository = { ctx, ble -> CarRepository(ctx, ble) },
-    onOpenDiagnostics: () -> Unit = {},
-    onOpenMultiplayer: () -> Unit = {}
+    onOpenDiagnostics: () -> Unit = {}
 ) {
     val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -105,9 +104,8 @@ fun DiscoveryScreen(
         if (!connected) return false
 
         // Enable notifications (retry a few times)
-        var notified = false
         repeat(3) {
-            try { if (ble.enableNotifications()) { notified = true; return@repeat } } catch (_: Throwable) {}
+            try { if (ble.enableNotifications()) { return@repeat } } catch (_: Throwable) {}
             kotlinx.coroutines.delay(150)
         }
         // Even if not confirmed, continue with best-effort

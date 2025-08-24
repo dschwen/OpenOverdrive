@@ -39,8 +39,7 @@ fun AppNav(navController: NavHostController = rememberNavController()) {
                     navController.navigate("lobby/$deviceAddress")
                 },
                 bleClient = bleClient,
-                onOpenDiagnostics = { navController.navigate("diagnostics") },
-                onOpenMultiplayer = { navController.navigate("multiplayer") }
+                onOpenDiagnostics = { navController.navigate("diagnostics") }
             )
         }
         // Single-player drive
